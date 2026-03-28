@@ -1,0 +1,18 @@
+# Claude Code
+.claude/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Node.js
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
