@@ -24,18 +24,16 @@ export function createMcpServer(): McpServer {
     {
       query: z.string().describe('Search query, e.g. "red sneakers" or "organic coffee beans"'),
       context: z.string().optional().describe("Additional context about the buyer's needs, preferences, demographics, or situation. When omitted, the query is used as context."),
-      catalog_id: z.string().optional().describe('Saved catalog slug from Shopify Dev Dashboard'),
       country: z.string().optional().describe('2-letter ISO country code for shipping location, e.g. "US", "JP"'),
       zip: z.string().optional().describe('Postal/ZIP code for shipping location'),
       price_min: z.number().optional().describe('Minimum price in the store currency'),
       price_max: z.number().optional().describe('Maximum price in the store currency'),
       limit: z.number().optional().describe('Maximum number of results to return (default: 10)'),
     },
-    async ({ query, context, catalog_id, country, zip, price_min, price_max, limit }) => {
+    async ({ query, context, country, zip, price_min, price_max, limit }) => {
       const result = await searchGlobalProducts({
         query,
         context: context ?? query,
-        ...(catalog_id && { catalog_id }),
         ...(country && { location: { country, ...(zip && { zip }) } }),
         ...(price_min !== undefined && { price_min }),
         ...(price_max !== undefined && { price_max }),
