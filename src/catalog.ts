@@ -117,7 +117,6 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
 export interface SearchProductsParams {
   query: string;
   context: string;
-  catalog_id?: string;
   location?: { country: string; zip?: string };
   price_min?: number;
   price_max?: number;
@@ -125,7 +124,12 @@ export interface SearchProductsParams {
 }
 
 export async function searchGlobalProducts(params: SearchProductsParams) {
-  return callCatalogMcp('search_global_products', params as unknown as Record<string, unknown>);
+  const catalogId = process.env.SHOPIFY_CATALOG_ID;
+  const args = {
+    ...params,
+    ...(catalogId && { catalog_id: catalogId }),
+  };
+  return callCatalogMcp('search_global_products', args as unknown as Record<string, unknown>);
 }
 
 export interface GetProductDetailsParams {
