@@ -116,6 +116,7 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
 
 export interface SearchProductsParams {
   query: string;
+  context: string;
   catalog_id?: string;
   location?: { country: string; zip?: string };
   price_min?: number;
