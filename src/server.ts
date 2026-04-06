@@ -8,27 +8,40 @@ import {
   cancelCheckout,
 } from './checkout.js';
 
+// Extract currency code from a price object — API uses both 'currencyCode' and 'currency'
+function getCurrency(price: Record<string, unknown>): string {
+  return (price.currencyCode ?? price.currency ?? '') as string;
+}
+
 // Response structure from Catalog MCP search_global_products:
 // result.offers[] = universal products
 //   .id, .title, .description, .images[].url
 //   .priceRange.min.{ amount, currencyCode }
 //   .options[].{ name, values[].{ value, availableForSale } }
-//   .products[] = per-shop offers
+//   .url  — product page URL on Shopify discovery
+//   .products[] = per-shop offers (may be empty when no offers match ship filter)
 //     .checkoutUrl, .price.{ amount, currencyCode }
 //     .shop.{ name, onlineStoreUrl }
 //     .selectedProductVariant.{ id, options[].{ name, value } }
 //     .availableForSale
+// Fallback: .variants[] = per-shop variant offers (alternate schema used by some responses)
+//   .id, .displayName, .checkoutUrl, .variantUrl, .price.{ amount, currencyCode }
 function formatSearchProduct(p: Record<string, unknown>, index: number): string {
   const perShopOffers = (p.products as Record<string, unknown>[] | undefined) ?? [];
-  const firstOffer = perShopOffers[0] ?? {};
-  const shop = (firstOffer.shop as Record<string, unknown> | undefined) ?? {};
+  // Fallback: some Catalog MCP responses use variants[] instead of products[]
+  const variants = (p.variants as Record<string, unknown>[] | undefined) ?? [];
+
+  const firstOffer = perShopOffers[0] ?? variants[0] ?? {};
+  const isVariantSchema = perShopOffers.length === 0 && variants.length > 0;
+
+  const shop = isVariantSchema ? {} : ((firstOffer.shop as Record<string, unknown> | undefined) ?? {});
   const variantPrice = firstOffer.price as Record<string, unknown> | undefined;
   const priceRange = p.priceRange as Record<string, Record<string, unknown>> | undefined;
 
   const priceStr = variantPrice
-    ? `${variantPrice.amount} ${variantPrice.currencyCode ?? ''}`.trim()
+    ? `${variantPrice.amount} ${getCurrency(variantPrice)}`.trim()
     : priceRange?.min
-    ? `${priceRange.min.amount} ${priceRange.min.currencyCode ?? ''}`.trim()
+    ? `${priceRange.min.amount} ${getCurrency(priceRange.min)}`.trim()
     : 'N/A';
 
   const images = (p.images as Record<string, unknown>[] | undefined) ?? [];
@@ -38,9 +51,12 @@ function formatSearchProduct(p: Record<string, unknown>, index: number): string 
     ? p.description.slice(0, 120) + (p.description.length > 120 ? '…' : '')
     : '';
 
-  const shopUrl = shop.onlineStoreUrl as string | undefined;
+  const shopUrl = (shop.onlineStoreUrl ?? firstOffer.variantUrl) as string | undefined;
   const checkoutUrl = firstOffer.checkoutUrl as string | undefined;
-  const shopName = shop.name as string | undefined;
+  const shopName = (shop.name ?? (isVariantSchema && firstOffer.displayName ? 'View product' : undefined)) as string | undefined;
+
+  // Product page URL (for when products[] is empty)
+  const productPageUrl = p.url as string | undefined;
 
   // Extract Base62 UPID for use with get_product_details
   const rawId = p.id as string | undefined;
@@ -60,7 +76,11 @@ function formatSearchProduct(p: Record<string, unknown>, index: number): string 
     `   ID: ${base62}`,
     ...optionLines,
     imageUrl ? `   Image: ${imageUrl}` : '',
-    checkoutUrl ? `   **Checkout: ${checkoutUrl}**` : '',
+    checkoutUrl
+      ? `   **Checkout: ${checkoutUrl}**`
+      : productPageUrl
+      ? `   Product page: ${productPageUrl} _(call get_product_details for checkout URL)_`
+      : '',
   ].filter(Boolean).join('\n');
 }
 
@@ -155,7 +175,13 @@ export function createMcpServer(): McpServer {
 
       const raw = result as Record<string, unknown>;
       const product = (raw?.product ?? raw) as Record<string, unknown>;
+
+      // Try products[] (standard MCP schema), then variants[] (actual response schema)
       let perShopOffers = (product.products as Record<string, unknown>[] | undefined) ?? [];
+      const isVariantSchema = perShopOffers.length === 0 && Array.isArray(product.variants);
+      if (isVariantSchema) {
+        perShopOffers = (product.variants as Record<string, unknown>[]);
+      }
 
       // Fallback: if ships_to filtering returned 0 offers, retry without it
       let usedFallback = false;
@@ -169,26 +195,40 @@ export function createMcpServer(): McpServer {
         const fallbackRaw = fallbackResult as Record<string, unknown>;
         const fallbackProduct = (fallbackRaw?.product ?? fallbackRaw) as Record<string, unknown>;
         perShopOffers = (fallbackProduct.products as Record<string, unknown>[] | undefined) ?? [];
+        if (perShopOffers.length === 0 && Array.isArray(fallbackProduct.variants)) {
+          perShopOffers = fallbackProduct.variants as Record<string, unknown>[];
+        }
         usedFallback = true;
       }
 
+      // Format a per-shop offer — handles both products[] schema and variants[] schema
       const formatOffer = (offer: Record<string, unknown>, i: number): string => {
-        const shop = (offer.shop as Record<string, unknown> | undefined) ?? {};
+        // products[] schema: offer has .shop, .selectedProductVariant, .availableForSale
+        // variants[] schema: offer has .displayName, .variantUrl, .price directly
+        const hasShop = Boolean(offer.shop);
+        const shop = hasShop ? ((offer.shop as Record<string, unknown> | undefined) ?? {}) : {};
         const price = offer.price as Record<string, unknown> | undefined;
-        const variant = (offer.selectedProductVariant as Record<string, unknown> | undefined) ?? {};
+        const variant = hasShop
+          ? ((offer.selectedProductVariant as Record<string, unknown> | undefined) ?? {})
+          : offer; // in variants[] schema, the variant IS the offer
         const variantOptions = (variant.options as Array<{ name: string; value: string }> | undefined) ?? [];
-        const priceStr = price ? `${price.amount} ${price.currencyCode ?? ''}` : 'N/A';
+        const priceStr = price ? `${price.amount} ${getCurrency(price)}` : 'N/A';
+        const displayName = (offer.displayName ?? shop.name) as string | undefined;
         const optStr = variantOptions.length > 0
           ? variantOptions.map((o) => `${o.name}: ${o.value}`).join(', ')
-          : '';
+          : typeof offer.displayName === 'string' ? offer.displayName : '';
         const availStr = offer.availableForSale === false ? ' ⚠️ sold out' : '';
+        const storeUrl = (shop.onlineStoreUrl ?? offer.variantUrl) as string | undefined;
+        const variantId = (variant.id ?? offer.id) as string | undefined;
         return [
-          `${i + 1}. **${shop.name ?? 'Shop'}** — ${priceStr}${optStr ? ` (${optStr})` : ''}${availStr}`,
+          `${i + 1}. **${displayName ?? 'Offer'}** — ${priceStr}${optStr ? ` (${optStr})` : ''}${availStr}`,
           offer.checkoutUrl && offer.availableForSale !== false
             ? `   **Checkout: ${offer.checkoutUrl}**`
+            : offer.checkoutUrl
+            ? `   Checkout (out of stock): ${offer.checkoutUrl}`
             : '',
-          shop.onlineStoreUrl ? `   Store: ${shop.onlineStoreUrl}` : '',
-          variant.id ? `   Variant ID: ${variant.id}` : '',
+          storeUrl ? `   Store: ${storeUrl}` : '',
+          variantId ? `   Variant ID: ${variantId}` : '',
         ].filter(Boolean).join('\n');
       };
 
@@ -205,6 +245,11 @@ export function createMcpServer(): McpServer {
       const imageUrl = images[0]?.url as string | undefined;
       const topFeatures = (product.topFeatures as string[] | undefined) ?? [];
 
+      // Get product title — may be missing in some API responses; fall back to description snippet
+      const productTitle = (product.title && product.title !== 'None')
+        ? String(product.title)
+        : (typeof product.description === 'string' ? product.description.slice(0, 60) : upid);
+
       const shippingNote = usedFallback
         ? `\n⚠️ No offers found shipping to ${ships_to}. Showing all available offers globally:`
         : ships_to
@@ -212,7 +257,7 @@ export function createMcpServer(): McpServer {
         : `\nAvailable at ${perShopOffers.length} shop(s):`;
 
       const header = [
-        `**${product.title}**`,
+        `**${productTitle}**`,
         typeof product.description === 'string' ? product.description.slice(0, 300) : '',
         imageUrl ? `\nImage: ${imageUrl}` : '',
         optionSummary ? `\n${optionSummary}` : '',
