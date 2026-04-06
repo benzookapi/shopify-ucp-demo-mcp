@@ -67,8 +67,9 @@ async function callCheckoutMcp(
   throw new Error('No content in Checkout MCP response');
 }
 
+// UCP spec: line_items use item.id (not variant_id at top level)
 export interface LineItem {
-  variant_id: string;
+  variant_id: string;   // kept for caller convenience; mapped to item.id in request
   quantity: number;
 }
 
@@ -79,21 +80,42 @@ export interface BuyerInfo {
   phone?: string;
 }
 
+// UCP spec uses schema.org-style address fields
 export interface Address {
   first_name?: string;
   last_name?: string;
-  address1: string;
+  street_address: string;       // maps to street_address (not address1)
   address2?: string;
-  city: string;
-  province?: string;
-  zip: string;
-  country_code: string;
+  address_locality: string;     // city
+  address_region?: string;      // state/province
+  postal_code: string;          // zip
+  address_country: string;      // 2-letter ISO country code
   phone?: string;
 }
 
 export interface FulfillmentInfo {
-  destination?: Address;
+  destinations?: Address[];
   shipping_method_handle?: string;
+}
+
+// Convert LineItem[] to UCP spec format: [{ quantity, item: { id } }]
+function toUcpLineItems(items: LineItem[]): unknown[] {
+  return items.map((li) => ({
+    quantity: li.quantity,
+    item: { id: li.variant_id },
+  }));
+}
+
+// Build fulfillment object per UCP spec
+function toUcpFulfillment(info: FulfillmentInfo): unknown {
+  const result: Record<string, unknown> = {};
+  if (info.destinations && info.destinations.length > 0) {
+    result.methods = [{ type: 'shipping', destinations: info.destinations }];
+  }
+  if (info.shipping_method_handle) {
+    result.shipping_method_handle = info.shipping_method_handle;
+  }
+  return result;
 }
 
 export async function createCheckout(
@@ -109,9 +131,9 @@ export async function createCheckout(
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
     checkout: {
       currency: params.currency,
-      line_items: params.line_items,
+      line_items: toUcpLineItems(params.line_items),
       ...(params.buyer && { buyer: params.buyer }),
-      ...(params.fulfillment && { fulfillment: params.fulfillment }),
+      ...(params.fulfillment && { fulfillment: toUcpFulfillment(params.fulfillment) }),
     },
   };
 
@@ -130,7 +152,11 @@ export async function updateCheckout(
   const args: Record<string, unknown> = {
     id: checkoutId,
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
-    checkout: updates,
+    checkout: {
+      ...(updates.line_items && { line_items: toUcpLineItems(updates.line_items) }),
+      ...(updates.buyer && { buyer: updates.buyer }),
+      ...(updates.fulfillment && { fulfillment: toUcpFulfillment(updates.fulfillment) }),
+    },
   };
 
   return callCheckoutMcp(shopDomain, 'update_checkout', args);

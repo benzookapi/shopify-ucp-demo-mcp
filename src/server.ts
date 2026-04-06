@@ -286,9 +286,15 @@ export function createMcpServer(): McpServer {
   // ----------------------------------------------------------------
   server.tool(
     'create_checkout',
-    'Create a checkout session for a product on a Shopify merchant store. Returns checkout status and a continue_url for the buyer to complete payment.',
+    [
+      'Create a checkout session for a product on a Shopify merchant store.',
+      'Returns checkout status and a continue_url for the buyer to complete payment.',
+      'IMPORTANT: The shop may not support UCP Checkout MCP (503 AuthenticationFailed means the shop has not enabled UCP).',
+      'If this tool fails with a 503 error, show the buyer the checkoutUrl from get_product_details results instead.',
+      'Extract shop_domain from the checkoutUrl hostname (e.g. "store.myshopify.com") or onlineStoreUrl.',
+    ].join(' '),
     {
-      shop_domain: z.string().describe('Shopify store domain, e.g. "example.myshopify.com"'),
+      shop_domain: z.string().describe('Shopify store domain, e.g. "example.myshopify.com" — extract from checkoutUrl or onlineStoreUrl'),
       currency: z.string().describe('ISO 4217 currency code, e.g. "USD", "JPY"'),
       line_items: z.array(z.object({
         variant_id: z.string().describe('Product variant GID, e.g. "gid://shopify/ProductVariant/12345"'),
@@ -297,10 +303,11 @@ export function createMcpServer(): McpServer {
       buyer_email: z.string().optional().describe('Buyer email for order confirmation'),
       buyer_first_name: z.string().optional(),
       buyer_last_name: z.string().optional(),
-      shipping_address_line1: z.string().optional(),
-      shipping_city: z.string().optional(),
-      shipping_zip: z.string().optional(),
-      shipping_country_code: z.string().optional().describe('2-letter ISO country code'),
+      shipping_street: z.string().optional().describe('Street address (e.g. "123 Main St")'),
+      shipping_city: z.string().optional().describe('City / address locality'),
+      shipping_region: z.string().optional().describe('State or province code (e.g. "CA", "NY")'),
+      shipping_postal_code: z.string().optional().describe('Postal / zip code'),
+      shipping_country: z.string().optional().describe('2-letter ISO country code, e.g. "US", "JP"'),
     },
     async ({
       shop_domain,
@@ -309,10 +316,11 @@ export function createMcpServer(): McpServer {
       buyer_email,
       buyer_first_name,
       buyer_last_name,
-      shipping_address_line1,
+      shipping_street,
       shipping_city,
-      shipping_zip,
-      shipping_country_code,
+      shipping_region,
+      shipping_postal_code,
+      shipping_country,
     }) => {
       const buyer =
         buyer_email || buyer_first_name || buyer_last_name
@@ -324,25 +332,38 @@ export function createMcpServer(): McpServer {
           : undefined;
 
       const fulfillment =
-        shipping_address_line1 && shipping_city && shipping_zip && shipping_country_code
+        shipping_street && shipping_city && shipping_postal_code && shipping_country
           ? {
-              destination: {
-                address1: shipping_address_line1,
-                city: shipping_city,
-                zip: shipping_zip,
-                country_code: shipping_country_code,
-              },
+              destinations: [{
+                street_address: shipping_street,
+                address_locality: shipping_city,
+                ...(shipping_region && { address_region: shipping_region }),
+                postal_code: shipping_postal_code,
+                address_country: shipping_country,
+              }],
             }
           : undefined;
 
-      const result = await createCheckout(shop_domain, {
-        currency,
-        line_items,
-        ...(buyer && { buyer }),
-        ...(fulfillment && { fulfillment }),
-      });
-
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      try {
+        const result = await createCheckout(shop_domain, {
+          currency,
+          line_items,
+          ...(buyer && { buyer }),
+          ...(fulfillment && { fulfillment }),
+        });
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      } catch (e) {
+        const msg = String(e);
+        if (msg.includes('503') || msg.includes('AuthenticationFailed') || msg.includes('Service temporarily unavailable')) {
+          return {
+            content: [{
+              type: 'text',
+              text: `The store "${shop_domain}" does not support UCP Checkout MCP (${msg.slice(0, 120)}).\n\nPlease use the checkoutUrl from the product details to proceed with purchase directly.`,
+            }],
+          };
+        }
+        throw e;
+      }
     }
   );
 
@@ -351,39 +372,42 @@ export function createMcpServer(): McpServer {
   // ----------------------------------------------------------------
   server.tool(
     'update_checkout',
-    'Update an existing checkout session with buyer information, shipping address, or updated line items. Check the status field in the response to determine next steps.',
+    'Update an existing checkout session with buyer information, shipping address, or updated line items. IMPORTANT: This replaces the entire checkout state — always include all line_items even if unchanged. Check the status field in the response to determine next steps.',
     {
       shop_domain: z.string().describe('Shopify store domain'),
       checkout_id: z.string().describe('Checkout session ID returned by create_checkout'),
+      line_items: z.array(z.object({
+        variant_id: z.string(),
+        quantity: z.number().int().min(1),
+      })).describe('Complete list of items (replaces existing — include all items, not just changes)'),
       buyer_email: z.string().optional(),
       buyer_first_name: z.string().optional(),
       buyer_last_name: z.string().optional(),
       buyer_phone: z.string().optional(),
       shipping_first_name: z.string().optional(),
       shipping_last_name: z.string().optional(),
-      shipping_address_line1: z.string().optional(),
-      shipping_address_line2: z.string().optional(),
-      shipping_city: z.string().optional(),
-      shipping_province: z.string().optional(),
-      shipping_zip: z.string().optional(),
-      shipping_country_code: z.string().optional(),
+      shipping_street: z.string().optional().describe('Street address'),
+      shipping_city: z.string().optional().describe('City / address locality'),
+      shipping_region: z.string().optional().describe('State or province code'),
+      shipping_postal_code: z.string().optional().describe('Postal / zip code'),
+      shipping_country: z.string().optional().describe('2-letter ISO country code'),
       shipping_method_handle: z.string().optional().describe('Shipping method handle from checkout response'),
     },
     async ({
       shop_domain,
       checkout_id,
+      line_items,
       buyer_email,
       buyer_first_name,
       buyer_last_name,
       buyer_phone,
       shipping_first_name,
       shipping_last_name,
-      shipping_address_line1,
-      shipping_address_line2,
+      shipping_street,
       shipping_city,
-      shipping_province,
-      shipping_zip,
-      shipping_country_code,
+      shipping_region,
+      shipping_postal_code,
+      shipping_country,
       shipping_method_handle,
     }) => {
       const buyer =
@@ -396,20 +420,18 @@ export function createMcpServer(): McpServer {
             }
           : undefined;
 
-      const hasAddress =
-        shipping_address_line1 && shipping_city && shipping_zip && shipping_country_code;
+      const hasAddress = shipping_street && shipping_city && shipping_postal_code && shipping_country;
       const fulfillment = hasAddress
         ? {
-            destination: {
+            destinations: [{
               ...(shipping_first_name && { first_name: shipping_first_name }),
               ...(shipping_last_name && { last_name: shipping_last_name }),
-              address1: shipping_address_line1!,
-              ...(shipping_address_line2 && { address2: shipping_address_line2 }),
-              city: shipping_city!,
-              ...(shipping_province && { province: shipping_province }),
-              zip: shipping_zip!,
-              country_code: shipping_country_code!,
-            },
+              street_address: shipping_street!,
+              address_locality: shipping_city!,
+              ...(shipping_region && { address_region: shipping_region }),
+              postal_code: shipping_postal_code!,
+              address_country: shipping_country!,
+            }],
             ...(shipping_method_handle && { shipping_method_handle }),
           }
         : shipping_method_handle
@@ -417,6 +439,7 @@ export function createMcpServer(): McpServer {
         : undefined;
 
       const result = await updateCheckout(shop_domain, checkout_id, {
+        line_items,
         ...(buyer && { buyer }),
         ...(fulfillment && { fulfillment }),
       });
