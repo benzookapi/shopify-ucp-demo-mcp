@@ -1,6 +1,7 @@
 import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './server.js';
+import { searchGlobalProducts, getGlobalProductDetails } from './catalog.js';
 
 const app = express();
 app.use(express.json());
@@ -29,6 +30,36 @@ app.post('/mcp', async (req, res) => {
 
   await server.connect(transport);
   await transport.handleRequest(req, res, req.body);
+});
+
+// Debug endpoint — returns raw Catalog MCP responses for diagnosis.
+// Usage: GET /debug/search?q=kimono&ships_to=US
+//        GET /debug/detail?upid=ABC123&ships_to=US
+app.get('/debug/search', async (req, res) => {
+  const q = String(req.query.q ?? 'Japanese spring fashion');
+  const ships_to = req.query.ships_to ? String(req.query.ships_to) : undefined;
+  try {
+    const result = await searchGlobalProducts({
+      query: q, context: q,
+      ...(ships_to && { ships_to }),
+      limit: 3,
+    });
+    res.json({ query: q, ships_to, result });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get('/debug/detail', async (req, res) => {
+  const upid = String(req.query.upid ?? '');
+  const ships_to = req.query.ships_to ? String(req.query.ships_to) : undefined;
+  if (!upid) { res.status(400).json({ error: 'upid required' }); return; }
+  try {
+    const result = await getGlobalProductDetails({ upid, ...(ships_to && { ships_to }) });
+    res.json({ upid, ships_to, result });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 // SSE upgrade endpoint — required by some MCP clients that use SSE transport
