@@ -99,6 +99,12 @@ For Claude Code (CLI):
 claude mcp add shopify-ucp --transport http https://your-app-name.onrender.com/mcp
 ```
 
+## Demo
+
+See the [Demo wiki page](../../wiki/Demo) for a video walkthrough using the prompt:
+
+> **American-made jeans available in Tokyo.** / 東京で手に入るアメリカ製のジーンズ
+
 ## Example conversation
 
 > **User:** Find me a spring parka available in Tokyo.
