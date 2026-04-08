@@ -129,7 +129,8 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
 export interface SearchProductsParams {
   query: string;
   context: string;
-  ships_to?: string;          // ISO 2-letter country code
+  ships_to?: string;          // ISO 2-letter country code (destination)
+  ships_from?: string;        // ISO 2-letter country code (origin)
   available_for_sale?: boolean;
   min_price?: number;
   max_price?: number;
@@ -142,6 +143,7 @@ export async function searchGlobalProducts(params: SearchProductsParams) {
     query: params.query,
     context: params.context,
     ...(params.ships_to && { ships_to: params.ships_to }),
+    ...(params.ships_from && { ships_from: params.ships_from }),
     ...(params.available_for_sale !== undefined && { available_for_sale: params.available_for_sale }),
     ...(params.min_price !== undefined && { min_price: params.min_price }),
     ...(params.max_price !== undefined && { max_price: params.max_price }),

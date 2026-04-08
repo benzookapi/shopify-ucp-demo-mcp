@@ -44,6 +44,12 @@ function formatSearchProduct(p: Record<string, unknown>, index: number): string 
     ? `${priceRange.min.amount} ${getCurrency(priceRange.min)}`.trim()
     : 'N/A';
 
+  // Rating: prefer per-shop offer rating, fall back to universal product rating
+  const offerRating = (firstOffer.rating ?? p.rating) as { value?: number; count?: number } | undefined;
+  const ratingStr = offerRating?.value
+    ? `⭐ ${offerRating.value.toFixed(1)}${offerRating.count ? ` (${offerRating.count})` : ''}`
+    : '';
+
   const images = (p.images as Record<string, unknown>[] | undefined) ?? [];
   const imageUrl = images[0]?.url as string | undefined;
 
@@ -70,7 +76,7 @@ function formatSearchProduct(p: Record<string, unknown>, index: number): string 
   });
 
   return [
-    `${index + 1}. **${p.title}** — ${priceStr}`,
+    `${index + 1}. **${p.title}** — ${priceStr}${ratingStr ? `  ${ratingStr}` : ''}`,
     shopName ? `   Shop: ${shopName}${shopUrl ? ` (${shopUrl})` : ''}` : '',
     desc ? `   ${desc}` : '',
     `   ID: ${base62}`,
@@ -98,31 +104,42 @@ export function createMcpServer(): McpServer {
     [
       'Search for products across all Shopify merchants worldwide.',
       'LOCATION RULES (critical — follow before calling this tool):',
-      '1. If the user query or conversation mentions a city, region, or country (e.g. "Tokyo", "東京", "Japan", "日本", "New York", "US", "France"), extract the ISO-3166-1 alpha-2 country code (e.g. "JP", "US", "FR") and pass it as ships_to.',
-      '2. If no location can be inferred, ask the user: "What country are you shopping from? (e.g. JP for Japan, US for United States)" — do NOT call this tool until you have a country code.',
-      '3. Always include the buyer\'s location in the context field, e.g. "buyer located in Tokyo, Japan".',
+      '1. Extract ships_to from the buyer\'s destination (e.g. "Tokyo", "Japan", "日本" → "JP"; "New York", "US" → "US").',
+      '2. If the query mentions a product origin country (e.g. "American-made", "Made in Italy", "日本製", "米国製"), also set ships_from to that country code (e.g. "US", "IT", "JP"). ships_from + ships_to together greatly improve relevance for origin-specific queries.',
+      '3. If no destination can be inferred, ask the user before calling this tool.',
       '4. Always pass available_for_sale: true unless the buyer explicitly wants out-of-stock items.',
-      'Returns product list with titles, prices, options (size/color), images, and direct checkout URLs.',
+      'CONTEXT RULES (critical — richer context = better results):',
+      'Always include: buyer location, product origin if mentioned, style/quality preferences, brand expectations, and any other details from the conversation.',
+      'Examples: "buyer in Tokyo looking for authentic American denim brands, premium quality, ships from US"; "buyer in Paris seeking organic Japanese skincare, natural ingredients".',
+      'Returns product list with titles, prices, ratings, options (size/color), and checkout URLs.',
     ].join(' '),
     {
-      query: z.string().describe('Search query, e.g. "spring parka" or "organic coffee beans"'),
-      context: z.string().describe("Context about the buyer: include location (e.g. 'buyer in Tokyo, Japan'), preferences, budget, style. This greatly improves result quality."),
-      ships_to: z.string().describe('2-letter ISO country code for shipping destination (REQUIRED — ask user if unknown). e.g. "JP", "US", "GB"'),
+      query: z.string().describe('Search query, e.g. "American jeans" or "Japanese skincare"'),
+      context: z.string().describe(
+        'Detailed buyer context — ALWAYS include: (1) buyer location, (2) product origin if mentioned, (3) style/quality preferences, (4) brand expectations. ' +
+        'Example: "buyer in Tokyo, Japan looking for authentic American-made premium denim jeans, prefers well-known US brands like Levi\'s or Wrangler, ships from US to JP"'
+      ),
+      ships_to: z.string().describe('2-letter ISO country code for the buyer\'s location / shipping destination (REQUIRED). e.g. "JP", "US", "GB"'),
+      ships_from: z.string().optional().describe(
+        'ISO country code for the product\'s shipping origin — use when the query mentions product origin. ' +
+        'e.g. "American-made" / "米国製" → "US"; "Made in Italy" → "IT"; "Japanese products" / "日本製" → "JP"'
+      ),
       available_for_sale: z.boolean().optional().describe('Only return in-stock purchasable products (default: true)'),
       price_min: z.number().optional().describe('Minimum price'),
       price_max: z.number().optional().describe('Maximum price'),
       limit: z.number().optional().describe('Number of results (default: 5, max: 20)'),
     },
-    async ({ query, context, ships_to, available_for_sale, price_min, price_max, limit }) => {
-      // Enrich context with location info if ships_to is provided
-      const enrichedContext = ships_to
-        ? context.includes(ships_to) ? context : `${context} [ships_to: ${ships_to}]`
-        : context;
+    async ({ query, context, ships_to, ships_from, available_for_sale, price_min, price_max, limit }) => {
+      // Enrich context with location info
+      let enrichedContext = context;
+      if (ships_to && !context.includes(ships_to)) enrichedContext += ` [ships_to: ${ships_to}]`;
+      if (ships_from && !context.includes(ships_from)) enrichedContext += ` [ships_from: ${ships_from}]`;
 
       const result = await searchGlobalProducts({
         query,
         context: enrichedContext,
         ships_to,
+        ...(ships_from && { ships_from }),
         available_for_sale: available_for_sale !== false, // default true
         ...(price_min !== undefined && { min_price: price_min }),
         ...(price_max !== undefined && { max_price: price_max }),
