@@ -25,6 +25,8 @@ This Server  (Node.js on Render)
 
 For a detailed sequence diagram showing the full interaction flow between the AI Agent, Demo MCP Server, and Shopify APIs, see [docs/sequence-diagram.md](docs/sequence-diagram.md).
 
+For implementation tips on improving search quality, ratings, and checkout handling, see [docs/tips.md](docs/tips.md).
+
 ## Setup
 
 ### 1. Get Shopify API credentials
