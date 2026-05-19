@@ -1,7 +1,6 @@
 import { getBearerToken } from './auth.js';
 
 const CATALOG_MCP_URL = 'https://discover.shopifyapps.com/global/mcp';
-const MCP_PROTOCOL_VERSION = '2024-11-05';
 
 let requestId = 0;
 
@@ -34,40 +33,12 @@ async function parseResponse(response: Response): Promise<unknown> {
   return JSON.parse(text);
 }
 
-// Perform the MCP initialize handshake and return the session ID (if any).
-async function initSession(token: string): Promise<string | null> {
-  const body = {
-    jsonrpc: '2.0',
-    method: 'initialize',
-    params: {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: { name: 'shopify-ucp-demo-mcp', version: '1.0.0' },
-    },
-    id: nextId(),
-  };
-
-  const response = await fetch(CATALOG_MCP_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Catalog MCP initialize failed (${response.status}): ${text}`);
-  }
-
-  return response.headers.get('mcp-session-id');
-}
-
+// The Catalog MCP endpoint accepts tools/call directly without a prior
+// `initialize` handshake. Measured 2026-05-19: tools/call returns 200 in
+// ~390ms with no mcp-session-id header. Skipping initialize halves the
+// round-trips per user request.
 async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   const token = await getBearerToken();
-  const sessionId = await initSession(token);
 
   const body = {
     jsonrpc: '2.0',
@@ -79,18 +50,13 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   // Debug: log the exact args being sent to Catalog MCP
   console.error(`[catalog] ${toolName} args:`, JSON.stringify(args));
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-    Authorization: `Bearer ${token}`,
-  };
-  if (sessionId) {
-    headers['mcp-session-id'] = sessionId;
-  }
-
   const response = await fetch(CATALOG_MCP_URL, {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
   });
 
