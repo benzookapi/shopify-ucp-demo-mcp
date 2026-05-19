@@ -65,7 +65,7 @@ The MCP endpoint is available at `http://localhost:3000/mcp`.
 4. Set environment variables in Render dashboard:
    - `SHOPIFY_CLIENT_ID`
    - `SHOPIFY_CLIENT_SECRET`
-   - `UCP_AGENT_PROFILE` (your Render URL)
+   - `UCP_AGENT_PROFILE` *(optional)* — defaults to Shopify's published reference profile JSON. Override only if you self-host a custom UCP profile document.
    - `SHOPIFY_CATALOG_ID` *(optional)* — saved catalog slug from Dev Dashboard
 
 ## Connect your AI to this MCP server
