@@ -119,11 +119,49 @@ The `currency` argument for `create_checkout` must match the **merchant's pricin
 
 This sample server's `create_checkout` tool description tells the AI explicitly: *"Pass the currency shown for the selected offer in the preceding get_product_details output. Do NOT infer from the buyer's country."* The sequence diagram in [sequence-diagram.md](sequence-diagram.md) also marks this handoff.
 
-## 7. Token caching
+## 7. Token caching — hardcode the TTL
 
-The bearer token from `api.shopify.com/auth/access_token` expires in 60 minutes. Cache it with a 5-minute buffer (refresh at 55 minutes) to avoid unnecessary re-authentication on every request.
+The bearer token from `api.shopify.com/auth/access_token` is documented as valid for 60 minutes, but the response body **does not include an `expires_in` field** — measured 2026-05-19, the only keys returned are `access_token` and `token_type`. A naive `Date.now() + data.expires_in * 1000` becomes `NaN` and your cache never hits.
+
+Hardcode the documented 60-minute TTL and refresh with a 5-minute buffer:
+
+```ts
+const TOKEN_TTL_MS = 60 * 60 * 1000;
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
+
+// On successful fetch:
+tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
+
+// On every getBearerToken() call:
+if (cachedToken && Date.now() < tokenExpiresAt - EXPIRY_BUFFER_MS) {
+  return cachedToken;
+}
+```
 
 The same token is used for both the Catalog MCP and the Checkout MCP — no separate credentials are needed.
+
+## 8. Skip the Catalog MCP `initialize` handshake
+
+The MCP spec describes an `initialize` request that returns an `mcp-session-id` header used by subsequent `tools/call` requests. Measured 2026-05-19, the Catalog MCP at `https://discover.shopifyapps.com/global/mcp` accepts `tools/call` **directly** with no prior `initialize` and no session header — and returns HTTP 200 in ~390ms.
+
+Sending `initialize` first doubles the round-trips for every search and detail call without any functional benefit. Go straight to `tools/call`:
+
+```ts
+const response = await fetch(CATALOG_MCP_URL, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: { name: 'search_global_products', arguments: { ... } },
+    id: 1,
+  }),
+});
+```
 
 ## References
 

@@ -18,9 +18,7 @@ sequenceDiagram
 
     Note over A,K: 2. Product Search
 
-    M->>C: POST /global/mcp · initialize
-    C-->>M: mcp-session-id
-    M->>C: tools/call: search_global_products<br/>{query, context, ships_to, limit}
+    M->>C: POST /global/mcp · tools/call: search_global_products<br/>{query, context, ships_to, limit}
     C-->>M: {offers: [{id, title, options, priceRange,<br/>products[], variants[], url}]}
     M-->>A: Found N products — titles, prices,<br/>options (size/color), Base62 UPIDs
 
@@ -28,9 +26,7 @@ sequenceDiagram
 
     A->>M: tools/call: get_product_details<br/>{upid, ships_to, color, size}
     M->>T: (use cached token or refresh)
-    M->>C: POST /global/mcp · initialize
-    C-->>M: mcp-session-id
-    M->>C: tools/call: get_global_product_details<br/>{upid, ships_to, product_options}
+    M->>C: POST /global/mcp · tools/call: get_global_product_details<br/>{upid, ships_to, product_options}
     C-->>M: {product: {id, description, options,<br/>variants: [{checkoutUrl, displayName, price}]}}
     M-->>A: Variant list with checkoutUrls,<br/>prices, and availability
 
@@ -66,11 +62,11 @@ sequenceDiagram
 
 ### Token caching
 
-The Demo MCP Server caches the bearer token from `api.shopify.com/auth/access_token` for up to 55 minutes (5-minute buffer before the 60-minute expiry). If the cached token is still valid, the auth request is skipped on subsequent calls.
+The Demo MCP Server caches the bearer token from `api.shopify.com/auth/access_token` for 55 minutes (5-minute buffer before the documented 60-minute expiry). The `/auth/access_token` response does not include an `expires_in` field — measured 2026-05-19, response keys are only `[access_token, token_type]` — so the TTL is hardcoded against Shopify's documented value. If the cached token is still valid, the auth request is skipped on subsequent calls.
 
-### Catalog MCP session
+### Catalog MCP — no initialize handshake
 
-Each call to the Catalog MCP (`search_global_products`, `get_global_product_details`) starts with an MCP `initialize` handshake. If the server returns an `mcp-session-id` header, subsequent requests in that call include it. The server is stateless — no session is persisted across user requests.
+Calls to the Catalog MCP go straight to `tools/call` with no prior `initialize` handshake. Measured 2026-05-19: `tools/call` returns HTTP 200 in ~390ms with no `mcp-session-id` header issued or required. Skipping `initialize` halves the round-trips per user request.
 
 ### Dual response schema from Catalog MCP
 
