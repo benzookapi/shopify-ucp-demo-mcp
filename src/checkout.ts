@@ -1,4 +1,5 @@
 import { getBearerToken } from './auth.js';
+import { UCP_AGENT_PROFILE } from './ucp-config.js';
 
 // Checkout MCP endpoint is per-shop: https://{shop-domain}/api/ucp/mcp
 function checkoutMcpUrl(shopDomain: string): string {
@@ -9,13 +10,6 @@ function checkoutMcpUrl(shopDomain: string): string {
 }
 
 let requestId = 0;
-
-// Default to Shopify's published reference UCP agent profile. A bare root URL
-// (e.g. https://example.onrender.com) is not spec-compliant — the URL must
-// resolve to a valid UCP profile JSON document.
-const UCP_AGENT_PROFILE =
-  process.env.UCP_AGENT_PROFILE ??
-  'https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json';
 
 async function callCheckoutMcp(
   shopDomain: string,
@@ -144,6 +138,53 @@ export async function createCheckout(
   return callCheckoutMcp(shopDomain, 'create_checkout', args);
 }
 
+// UCP update_checkout uses PUT semantics: the request body fully replaces
+// the checkout state. Any field omitted from the payload is dropped.
+// To preserve fields not being changed, we fetch current state with
+// get_checkout and merge the diff before submitting.
+export async function getCheckout(shopDomain: string, checkoutId: string) {
+  const args: Record<string, unknown> = {
+    id: checkoutId,
+    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+  };
+
+  return callCheckoutMcp(shopDomain, 'get_checkout', args);
+}
+
+// Merge incoming changes into the existing checkout payload from get_checkout.
+// Returns the merged checkout object to send to update_checkout.
+function mergeCheckout(
+  existing: Record<string, unknown> | undefined,
+  updates: {
+    buyer?: BuyerInfo;
+    fulfillment?: FulfillmentInfo;
+    line_items?: LineItem[];
+  }
+): Record<string, unknown> {
+  const base = existing ?? {};
+  const merged: Record<string, unknown> = { ...base };
+
+  // line_items: full replacement when supplied (caller already builds the full list)
+  if (updates.line_items) {
+    merged.line_items = toUcpLineItems(updates.line_items);
+  }
+
+  // buyer: shallow merge over existing buyer
+  if (updates.buyer) {
+    const existingBuyer = (base.buyer as Record<string, unknown> | undefined) ?? {};
+    merged.buyer = { ...existingBuyer, ...updates.buyer };
+  }
+
+  // fulfillment: replace methods/handle when supplied
+  if (updates.fulfillment) {
+    const incoming = toUcpFulfillment(updates.fulfillment) as Record<string, unknown>;
+    const existingFulfillment = (base.fulfillment as Record<string, unknown> | undefined) ?? {};
+    merged.fulfillment = { ...existingFulfillment, ...incoming };
+  }
+
+  return merged;
+}
+
 export async function updateCheckout(
   shopDomain: string,
   checkoutId: string,
@@ -153,14 +194,23 @@ export async function updateCheckout(
     line_items?: LineItem[];
   }
 ) {
+  // Fetch current checkout state so we can PUT a full payload (UCP spec).
+  // If get_checkout fails we still attempt the update with just the supplied
+  // fields — degraded but better than failing the whole call.
+  let existingCheckout: Record<string, unknown> | undefined;
+  try {
+    const current = (await getCheckout(shopDomain, checkoutId)) as Record<string, unknown>;
+    existingCheckout = (current?.checkout as Record<string, unknown> | undefined) ?? current;
+  } catch (err) {
+    console.error('[checkout] get_checkout failed, proceeding with partial update:', err);
+  }
+
+  const checkout = mergeCheckout(existingCheckout, updates);
+
   const args: Record<string, unknown> = {
     id: checkoutId,
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
-    checkout: {
-      ...(updates.line_items && { line_items: toUcpLineItems(updates.line_items) }),
-      ...(updates.buyer && { buyer: updates.buyer }),
-      ...(updates.fulfillment && { fulfillment: toUcpFulfillment(updates.fulfillment) }),
-    },
+    checkout,
   };
 
   return callCheckoutMcp(shopDomain, 'update_checkout', args);
@@ -184,10 +234,18 @@ export async function completeCheckout(
   return callCheckoutMcp(shopDomain, 'complete_checkout', args);
 }
 
-export async function cancelCheckout(shopDomain: string, checkoutId: string) {
+// UCP spec: cancel_checkout requires meta.idempotency-key so retries are safe.
+export async function cancelCheckout(
+  shopDomain: string,
+  checkoutId: string,
+  idempotencyKey: string,
+) {
   const args: Record<string, unknown> = {
     id: checkoutId,
-    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+    meta: {
+      'ucp-agent': { profile: UCP_AGENT_PROFILE },
+      'idempotency-key': idempotencyKey,
+    },
   };
 
   return callCheckoutMcp(shopDomain, 'cancel_checkout', args);

@@ -13,6 +13,105 @@ function getCurrency(price: Record<string, unknown>): string {
   return (price.currencyCode ?? price.currency ?? '') as string;
 }
 
+// UTM tag appended to continue_url so merchants can attribute traffic
+// from this sample. Per the Shopify Checkout MCP docs, agents are
+// expected to brand the handoff URL with a recognizable utm_source.
+const CONTINUE_URL_UTM = 'utm_source=ucp_demo_app';
+
+function withUtm(url: string): string {
+  if (!url || url.includes('utm_source=')) return url;
+  return url + (url.includes('?') ? '&' : '?') + CONTINUE_URL_UTM;
+}
+
+// Format a Checkout MCP response (returned from create/update/complete_checkout)
+// into status-aware human-readable text so the AI can act on it directly
+// instead of re-parsing raw JSON. Always appends the full payload in a
+// collapsible block so any field is still inspectable downstream.
+function formatCheckoutResponse(result: unknown): string {
+  const root = (result as Record<string, unknown> | null) ?? {};
+  const checkout = ((root.checkout as Record<string, unknown> | undefined) ?? root) as Record<string, unknown>;
+  const status = checkout.status as string | undefined;
+  const id = checkout.id as string | undefined;
+  const continueUrl = checkout.continue_url as string | undefined;
+  const messages = (checkout.messages as Array<Record<string, unknown>> | undefined) ?? [];
+  const totals = (checkout.totals as Array<Record<string, unknown>> | undefined) ?? [];
+  const order = checkout.order as { id?: string; permalink_url?: string } | undefined;
+
+  const continueUrlWithUtm = continueUrl ? withUtm(continueUrl) : undefined;
+  const totalEntry =
+    totals.find((t) => t.type === 'total') ?? totals[totals.length - 1];
+  const totalText =
+    (totalEntry?.display_text as string | undefined) ??
+    (totalEntry?.amount != null ? String(totalEntry.amount) : undefined);
+
+  const lines: string[] = [];
+  lines.push(`**Status: ${status ?? 'unknown'}**`);
+  if (id) lines.push(`Checkout ID: \`${id}\``);
+  if (totalText) lines.push(`Total: ${totalText}`);
+
+  switch (status) {
+    case 'incomplete':
+      lines.push('');
+      lines.push('Missing information. Collect buyer email / name and shipping address, then call `update_checkout`.');
+      break;
+    case 'requires_escalation':
+      lines.push('');
+      lines.push('**Buyer must finish in their browser. Send them this URL:**');
+      lines.push(continueUrlWithUtm ?? '(no continue_url returned)');
+      if (messages.length > 0) {
+        const buyerMsgs = messages.filter((m) => {
+          const sev = m.severity as string | undefined;
+          return sev?.startsWith('requires_buyer');
+        });
+        if (buyerMsgs.length > 0) {
+          lines.push('');
+          lines.push('Reasons:');
+          buyerMsgs.forEach((m) => {
+            const sev = (m.severity as string) ?? 'unspecified';
+            const detail =
+              (m.display_text as string | undefined) ??
+              (m.type as string | undefined) ??
+              '(no detail)';
+            lines.push(`- ${sev}: ${detail}`);
+          });
+        }
+      }
+      lines.push('');
+      lines.push('After the buyer completes the merchant-hosted step, the checkout transitions to `ready_for_complete` and you can call `complete_checkout`.');
+      break;
+    case 'ready_for_complete':
+      lines.push('');
+      lines.push('Checkout is ready. Call `complete_checkout` with a fresh `idempotency_key` (UUID) to place the order.');
+      break;
+    case 'completed':
+      lines.push('');
+      lines.push('Order placed.');
+      if (order?.id) lines.push(`Order ID: \`${order.id}\``);
+      if (order?.permalink_url) lines.push(`Receipt: ${withUtm(order.permalink_url)}`);
+      break;
+    case 'canceled':
+      lines.push('');
+      lines.push('Checkout canceled.');
+      break;
+    default:
+      // Unknown status — fall through and rely on the raw payload below.
+      break;
+  }
+
+  // Always include the raw payload so downstream code (or a debugging human)
+  // can read every field. Kept collapsed to avoid drowning the AI prompt.
+  lines.push('');
+  lines.push('<details><summary>Raw response</summary>');
+  lines.push('');
+  lines.push('```json');
+  lines.push(JSON.stringify(result, null, 2));
+  lines.push('```');
+  lines.push('');
+  lines.push('</details>');
+
+  return lines.join('\n');
+}
+
 // Response structure from Catalog MCP search_global_products:
 // result.offers[] = universal products
 //   .id, .title, .description, .images[].url
@@ -369,7 +468,7 @@ export function createMcpServer(): McpServer {
           ...(buyer && { buyer }),
           ...(fulfillment && { fulfillment }),
         });
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        return { content: [{ type: 'text', text: formatCheckoutResponse(result) }] };
       } catch (e) {
         const msg = String(e);
         if (msg.includes('503') || msg.includes('AuthenticationFailed') || msg.includes('Service temporarily unavailable')) {
@@ -463,7 +562,7 @@ export function createMcpServer(): McpServer {
         ...(fulfillment && { fulfillment }),
       });
 
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text', text: formatCheckoutResponse(result) }] };
     }
   );
 
@@ -480,7 +579,7 @@ export function createMcpServer(): McpServer {
     },
     async ({ shop_domain, checkout_id, idempotency_key }) => {
       const result = await completeCheckout(shop_domain, checkout_id, idempotency_key);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text', text: formatCheckoutResponse(result) }] };
     }
   );
 
@@ -489,14 +588,15 @@ export function createMcpServer(): McpServer {
   // ----------------------------------------------------------------
   server.tool(
     'cancel_checkout',
-    'Cancel an active checkout session. Use this when the buyer decides not to proceed.',
+    'Cancel an active checkout session. Use this when the buyer decides not to proceed. UCP spec requires a unique idempotency_key (UUID) so retries do not double-cancel.',
     {
       shop_domain: z.string().describe('Shopify store domain'),
       checkout_id: z.string().describe('Checkout session ID to cancel'),
+      idempotency_key: z.string().describe('Unique UUID for this cancellation attempt (required by UCP spec for safe retries)'),
     },
-    async ({ shop_domain, checkout_id }) => {
-      const result = await cancelCheckout(shop_domain, checkout_id);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    async ({ shop_domain, checkout_id, idempotency_key }) => {
+      const result = await cancelCheckout(shop_domain, checkout_id, idempotency_key);
+      return { content: [{ type: 'text', text: formatCheckoutResponse(result) }] };
     }
   );
 

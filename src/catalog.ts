@@ -1,4 +1,5 @@
 import { getBearerToken } from './auth.js';
+import { UCP_AGENT_PROFILE } from './ucp-config.js';
 
 const CATALOG_MCP_URL = 'https://discover.shopifyapps.com/global/mcp';
 
@@ -40,15 +41,24 @@ async function parseResponse(response: Response): Promise<unknown> {
 async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   const token = await getBearerToken();
 
+  // Inject meta.ucp-agent.profile required by the UCP Catalog MCP spec.
+  // The current discover.shopifyapps.com endpoint accepts the flat-args shape
+  // this sample uses; passing meta alongside is forward-compatible with the
+  // canonical {your_catalog_url} endpoint, which requires it.
+  const argsWithMeta: Record<string, unknown> = {
+    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+    ...args,
+  };
+
   const body = {
     jsonrpc: '2.0',
     method: 'tools/call',
-    params: { name: toolName, arguments: args },
+    params: { name: toolName, arguments: argsWithMeta },
     id: nextId(),
   };
 
   // Debug: log the exact args being sent to Catalog MCP
-  console.error(`[catalog] ${toolName} args:`, JSON.stringify(args));
+  console.error(`[catalog] ${toolName} args:`, JSON.stringify(argsWithMeta));
 
   const response = await fetch(CATALOG_MCP_URL, {
     method: 'POST',
