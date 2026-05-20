@@ -62,7 +62,7 @@ For an explanation of UCP escalation — what this sample demos, what it doesn't
 
 For implementation tips on improving search quality, ratings, and checkout handling, see [docs/tips.md](docs/tips.md).
 
-To verify the wire format using Shopify's published [UCP CLI](https://ucp.dev/docs/cli) — including the spec-named tools (`search_catalog`, `get_product`, `create_checkout`, etc.) that this sample wraps — see [docs/test-with-ucp-cli.md](docs/test-with-ucp-cli.md).
+To verify the wire format using Shopify's official [`@shopify/ucp-cli`](https://shopify.dev/docs/agents/get-started/quickstart) — including the spec-named tools (`search_catalog`, `get_product`, `create_checkout`, etc.) that this sample wraps — see [docs/test-with-ucp-cli.md](docs/test-with-ucp-cli.md).
 
 ## Setup
 
