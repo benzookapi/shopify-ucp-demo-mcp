@@ -14,14 +14,26 @@ function getCurrency(price: Record<string, unknown>): string {
   return (price.currencyCode ?? price.currency ?? '') as string;
 }
 
-// UTM tag appended to continue_url so merchants can attribute traffic
-// from this sample. Per the Shopify Checkout MCP docs, agents are
-// expected to brand the handoff URL with a recognizable utm_source.
-const CONTINUE_URL_UTM = 'utm_source=ucp_demo_app';
+// Append a query parameter, but only if the key isn't already present.
+function appendQuery(url: string, key: string, value: string): string {
+  if (!url) return url;
+  if (new RegExp(`[?&]${key}=`).test(url)) return url;
+  return url + (url.includes('?') ? '&' : '?') + `${key}=${value}`;
+}
 
-function withUtm(url: string): string {
-  if (!url || url.includes('utm_source=')) return url;
-  return url + (url.includes('?') ? '&' : '?') + CONTINUE_URL_UTM;
+// Decorate the buyer-facing continue_url before handing it to the AI:
+//   - utm_source=ucp_demo_app : per Checkout MCP docs, agents brand the
+//     handoff URL so merchants can attribute traffic from this sample.
+//   - skip_shop_pay=true : community-verified workaround that disables
+//     Shopify's "auto Shop Pay login" default. Without it, when the buyer's
+//     email matches an existing Shop Pay account, the hosted checkout
+//     opens straight into the OTP prompt and ignores the shipping address /
+//     buyer fields the agent already filled via update_checkout. See
+//     https://community.shopify.com/t/stop-checkout-from-defaulting-to-shop-pay/303011
+function decorateContinueUrl(url: string): string {
+  let out = appendQuery(url, 'utm_source', 'ucp_demo_app');
+  out = appendQuery(out, 'skip_shop_pay', 'true');
+  return out;
 }
 
 // Format a Checkout MCP response (returned from create/update/complete_checkout)
@@ -38,7 +50,7 @@ function formatCheckoutResponse(result: unknown): string {
   const totals = (checkout.totals as Array<Record<string, unknown>> | undefined) ?? [];
   const order = checkout.order as { id?: string; permalink_url?: string } | undefined;
 
-  const continueUrlWithUtm = continueUrl ? withUtm(continueUrl) : undefined;
+  const continueUrlDecorated = continueUrl ? decorateContinueUrl(continueUrl) : undefined;
   const totalEntry =
     totals.find((t) => t.type === 'total') ?? totals[totals.length - 1];
   const totalText =
@@ -58,7 +70,7 @@ function formatCheckoutResponse(result: unknown): string {
     case 'requires_escalation':
       lines.push('');
       lines.push('**Buyer must finish in their browser. Send them this URL:**');
-      lines.push(continueUrlWithUtm ?? '(no continue_url returned)');
+      lines.push(continueUrlDecorated ?? '(no continue_url returned)');
       if (messages.length > 0) {
         const buyerMsgs = messages.filter((m) => {
           const sev = m.severity as string | undefined;
@@ -88,7 +100,8 @@ function formatCheckoutResponse(result: unknown): string {
       lines.push('');
       lines.push('Order placed.');
       if (order?.id) lines.push(`Order ID: \`${order.id}\``);
-      if (order?.permalink_url) lines.push(`Receipt: ${withUtm(order.permalink_url)}`);
+      if (order?.permalink_url)
+        lines.push(`Receipt: ${appendQuery(order.permalink_url, 'utm_source', 'ucp_demo_app')}`);
       break;
     case 'canceled':
       lines.push('');
