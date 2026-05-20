@@ -147,13 +147,16 @@ every Checkout MCP call (cached in-process).
 
 ### 4.1 `create_checkout` — empty buyer + address
 
-> ℹ️ **UCP `signals` are required, not optional.** Shopify's Checkout MCP
-> rejects `create_checkout` without `checkout.signals["dev.ucp.buyer_ip"]`
-> and returns `AuthenticationFailed: Missing required buyer IP header.` —
-> the error message is misleading; the value lives in the JSON body, not
-> an HTTP header. The CLI auto-injects it from your local connection;
-> this sample plumbs it from the incoming `/mcp` request via
-> [`request-context.ts`](../src/request-context.ts). In real agentic
+> ℹ️ **The buyer IP is required.** Some merchants reject `create_checkout`
+> with `AuthenticationFailed: Missing required buyer IP header.` when the
+> caller doesn't forward the buyer's IP. Shopify uses the same
+> case-sensitive `Shopify-Storefront-Buyer-IP` header as Storefront API
+> server-side requests (see
+> [Shopify API authentication](https://shopify.dev/docs/api/usage/authentication#making-server-side-requests)).
+> The CLI sets it from your local connection; this sample plumbs it from
+> the incoming `/mcp` request via
+> [`request-context.ts`](../src/request-context.ts) and also includes
+> `checkout.signals["dev.ucp.buyer_ip"]` per UCP spec. In real agentic
 > commerce, the AI host (not this server) is responsible for passing the
 > buyer's true IP.
 

@@ -127,12 +127,28 @@ async function callCheckoutMcp(
     id: ++requestId,
   };
 
+  // Shopify Checkout MCP rejects requests with `AuthenticationFailed:
+  // Missing required buyer IP header.` when the buyer IP is absent. The
+  // wording matches Shopify's existing convention for server-side
+  // Storefront API requests — the canonical header is the case-sensitive
+  // `Shopify-Storefront-Buyer-IP`. Also send `User-Agent` so Shopify can
+  // attribute traffic correctly.
+  const buyerIp = getBuyerIp();
+  const userAgent = getUserAgent();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  };
+  if (buyerIp) headers['Shopify-Storefront-Buyer-IP'] = buyerIp;
+  if (userAgent) headers['User-Agent'] = userAgent;
+
+  console.error(
+    `[checkout] ${toolName} buyerIp=${buyerIp ?? '(none)'} url=${url}`
+  );
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
