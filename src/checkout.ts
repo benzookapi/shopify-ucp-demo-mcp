@@ -1,5 +1,20 @@
 import { getBearerToken } from './auth.js';
 import { UCP_AGENT_PROFILE } from './ucp-config.js';
+import { getBuyerIp, getUserAgent } from './request-context.js';
+
+// Build UCP signals object for outgoing checkout payloads.
+// Spec: ucp.dev — Signals is a top-level field of `checkout` (sibling of
+// line_items, buyer, fulfillment, payment). Shopify rejects create_checkout
+// without `dev.ucp.buyer_ip` even though its error message frames it as a
+// missing HTTP header. Keys are dotted reverse-domain literals per the spec.
+function buildSignals(): Record<string, string> | undefined {
+  const buyerIp = getBuyerIp();
+  const userAgent = getUserAgent();
+  const signals: Record<string, string> = {};
+  if (buyerIp) signals['dev.ucp.buyer_ip'] = buyerIp;
+  if (userAgent) signals['dev.ucp.user_agent'] = userAgent;
+  return Object.keys(signals).length > 0 ? signals : undefined;
+}
 
 // Thrown when a shop's /.well-known/ucp manifest is absent or missing the
 // shopping service. Lets callers (e.g. server.ts) surface a clear
@@ -211,6 +226,7 @@ export async function createCheckout(
     fulfillment?: FulfillmentInfo;
   }
 ) {
+  const signals = buildSignals();
   const args: Record<string, unknown> = {
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
     checkout: {
@@ -218,6 +234,7 @@ export async function createCheckout(
       line_items: toUcpLineItems(params.line_items),
       ...(params.buyer && { buyer: params.buyer }),
       ...(params.fulfillment && { fulfillment: toUcpFulfillment(params.fulfillment) }),
+      ...(signals && { signals }),
     },
   };
 
@@ -293,6 +310,12 @@ export async function updateCheckout(
 
   const checkout = mergeCheckout(existingCheckout, updates);
 
+  // Refresh signals on every update — buyer IP / UA may legitimately
+  // change between calls in the same session, and PUT semantics mean
+  // any field we omit is dropped server-side.
+  const signals = buildSignals();
+  if (signals) checkout.signals = signals;
+
   const args: Record<string, unknown> = {
     id: checkoutId,
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
@@ -308,13 +331,21 @@ export async function completeCheckout(
   idempotencyKey: string,
   payment?: Record<string, unknown>
 ) {
+  const signals = buildSignals();
+  // Always send a checkout body if we have signals to attach, even when
+  // payment is undefined — the spec's complete_checkout examples include
+  // signals at this stage for fraud signals at order-creation time.
+  const checkout: Record<string, unknown> = {
+    ...(payment && { payment }),
+    ...(signals && { signals }),
+  };
   const args: Record<string, unknown> = {
     id: checkoutId,
     meta: {
       'ucp-agent': { profile: UCP_AGENT_PROFILE },
       'idempotency-key': idempotencyKey,
     },
-    ...(payment && { checkout: { payment } }),
+    ...(Object.keys(checkout).length > 0 && { checkout }),
   };
 
   return callCheckoutMcp(shopDomain, 'complete_checkout', args);

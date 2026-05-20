@@ -2,9 +2,15 @@ import express from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpServer } from './server.js';
 import { searchGlobalProducts, getGlobalProductDetails } from './catalog.js';
+import { requestContext, extractBuyerIp } from './request-context.js';
 
 const app = express();
 app.use(express.json());
+
+// Trust X-Forwarded-For from Render's reverse proxy so req.ip resolves
+// to the original caller. Safe because Render terminates TLS in front
+// of this process — only their proxy can set XFF.
+app.set('trust proxy', true);
 
 const PORT = process.env.PORT ?? 3000;
 
@@ -18,18 +24,27 @@ app.get('/health', (_req, res) => {
 // This is intentional: the MCP session state (checkout IDs etc.) lives in the
 // AI client, not on this server.
 app.post('/mcp', async (req, res) => {
-  const server = createMcpServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless: no session persistence
-  });
+  // Capture buyer-side context so the Checkout MCP layer can inject
+  // checkout.signals.dev.ucp.buyer_ip (required by UCP — without it,
+  // Shopify returns AuthenticationFailed: Missing required buyer IP header).
+  const buyerIp = extractBuyerIp(req.headers, req.socket.remoteAddress);
+  const userAgent =
+    typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined;
 
-  res.on('close', () => {
-    transport.close();
-    server.close();
-  });
+  await requestContext.run({ buyerIp, userAgent }, async () => {
+    const server = createMcpServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined, // stateless: no session persistence
+    });
 
-  await server.connect(transport);
-  await transport.handleRequest(req, res, req.body);
+    res.on('close', () => {
+      transport.close();
+      server.close();
+    });
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  });
 });
 
 // Debug endpoints — return raw Catalog MCP responses for local diagnosis.

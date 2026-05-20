@@ -147,6 +147,16 @@ every Checkout MCP call (cached in-process).
 
 ### 4.1 `create_checkout` — empty buyer + address
 
+> ℹ️ **UCP `signals` are required, not optional.** Shopify's Checkout MCP
+> rejects `create_checkout` without `checkout.signals["dev.ucp.buyer_ip"]`
+> and returns `AuthenticationFailed: Missing required buyer IP header.` —
+> the error message is misleading; the value lives in the JSON body, not
+> an HTTP header. The CLI auto-injects it from your local connection;
+> this sample plumbs it from the incoming `/mcp` request via
+> [`request-context.ts`](../src/request-context.ts). In real agentic
+> commerce, the AI host (not this server) is responsible for passing the
+> buyer's true IP.
+
 ```bash
 # Use the endpoint from 4.0, NOT the buyer-facing custom domain
 SHOP="pieces-of-japan.myshopify.com"
