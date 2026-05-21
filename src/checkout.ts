@@ -4,9 +4,12 @@ import { getBuyerIp, getUserAgent } from './request-context.js';
 
 // Build UCP signals object for outgoing checkout payloads.
 // Spec: ucp.dev — Signals is a top-level field of `checkout` (sibling of
-// line_items, buyer, fulfillment, payment). Shopify rejects create_checkout
-// without `dev.ucp.buyer_ip` even though its error message frames it as a
-// missing HTTP header. Keys are dotted reverse-domain literals per the spec.
+// line_items, buyer, fulfillment, payment). Keys are dotted reverse-domain
+// literals per the spec. We populate `dev.ucp.buyer_ip` and
+// `dev.ucp.user_agent` here for spec compliance; the buyer IP requirement
+// is enforced by Shopify via the Shopify-Buyer-IP HTTP header (see the
+// header block in callCheckoutMcp), not the body signal — keeping both
+// keeps us forward-compatible if the implementation moves to read signals.
 function buildSignals(): Record<string, string> | undefined {
   const buyerIp = getBuyerIp();
   const userAgent = getUserAgent();
@@ -127,25 +130,23 @@ async function callCheckoutMcp(
     id: ++requestId,
   };
 
-  // Shopify Checkout MCP rejects requests with `AuthenticationFailed:
-  // Missing required buyer IP header.` when the buyer IP is absent.
-  // The exact header name isn't documented for Checkout MCP, so send
-  // every plausible candidate at once — Shopify ignores unknown headers
-  // and logs will tell us which one it actually honors. Mirror Shopify's
-  // own Storefront API convention plus standard proxy/forwarding names.
+  // Shopify Checkout MCP requires the Shopify-Buyer-IP HTTP header with a
+  // valid IPv4 or IPv6 address when calling tools that mutate cart state
+  // under a trusted authentication method. Omitting it returns HTTP 422
+  // with `Missing required buyer IP header.` (observed empirically — the
+  // error message frames it as a header, and that is in fact where the
+  // value must live, not the JSON body).
+  //
+  // Do NOT add X-Forwarded-For / X-Real-IP here: those are proxy-chain
+  // headers that hosting layers (Render, Cloudflare, etc.) may overwrite
+  // or append to in flight, which can confuse downstream IP-handling code.
   const buyerIp = getBuyerIp();
   const userAgent = getUserAgent();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
-  if (buyerIp) {
-    headers['Shopify-Storefront-Buyer-IP'] = buyerIp;
-    headers['Shopify-Buyer-IP'] = buyerIp;
-    headers['X-Forwarded-For'] = buyerIp;
-    headers['X-Real-IP'] = buyerIp;
-    headers['Buyer-IP'] = buyerIp;
-  }
+  if (buyerIp) headers['Shopify-Buyer-IP'] = buyerIp;
   if (userAgent) headers['User-Agent'] = userAgent;
 
   // Full request dump so we can verify what Shopify actually receives —

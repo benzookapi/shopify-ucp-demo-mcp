@@ -1,16 +1,22 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 // Per-request context plumbed from the Express /mcp handler down into the
-// outgoing Shopify Checkout MCP calls. UCP's checkout schema requires
-// `checkout.signals["dev.ucp.buyer_ip"]` (and optionally
-// `dev.ucp.user_agent`); without it, Shopify's Checkout MCP rejects
-// create_checkout with `AuthenticationFailed: Missing required buyer IP
-// header.` despite the value living in the JSON body, not an HTTP header.
+// outgoing Shopify Checkout MCP calls. Shopify's Checkout MCP requires a
+// Shopify-Buyer-IP HTTP header with a valid IPv4 or IPv6 address when
+// mutating cart state — omitting it returns HTTP 422 with
+// `Missing required buyer IP header.` (observed empirically). UCP's spec
+// also defines `checkout.signals["dev.ucp.buyer_ip"]` and
+// `dev.ucp.user_agent` in the JSON body; we populate both for spec
+// compliance and forward compatibility, but the HTTP header is what
+// Shopify currently enforces on.
 //
 // Honest caveat: in this Remote MCP topology the IP we capture is the
 // AI provider's IP (Anthropic/OpenAI/etc), not the buyer's true client
 // IP — agentic commerce shifts buyer-IP collection to the AI host. For
-// this demo, the provider IP is sufficient to pass Shopify's validation.
+// this demo, the provider IP is sufficient to satisfy Shopify's
+// validation, which only checks that the header parses as an IP address.
+// Production deployments serving real buyer traffic should pass the
+// buyer's true IP.
 export interface RequestContext {
   buyerIp?: string;
   userAgent?: string;

@@ -136,14 +136,21 @@ URL.
 
 ### 5.1 `checkout create` — empty buyer + address
 
-> ℹ️ **The buyer IP is required.** Some merchants reject `create_checkout`
-> with `AuthenticationFailed: Missing required buyer IP header.` if the
-> caller doesn't forward the buyer's IP. The CLI sets it from your local
-> connection; this sample plumbs it from the incoming `/mcp` request via
-> [`request-context.ts`](../src/request-context.ts) and also includes
-> `checkout.signals["dev.ucp.buyer_ip"]` per UCP spec. In real agentic
-> commerce, the AI host (not this server) is responsible for passing the
-> buyer's true IP.
+> ℹ️ **The `Shopify-Buyer-IP` header is required.** Shopify's Checkout MCP
+> requires a `Shopify-Buyer-IP` HTTP header with a valid IPv4 or IPv6
+> address when calling tools that mutate cart state with a trusted
+> authentication method. Omitting it returns HTTP 422 with
+> `Missing required buyer IP header.` This requirement is observed
+> empirically; the CLI sets the header from your local connection
+> automatically, and this sample plumbs the IP from the incoming `/mcp`
+> request via [`request-context.ts`](../src/request-context.ts). UCP's
+> spec also defines `checkout.signals["dev.ucp.buyer_ip"]` in the JSON
+> body, so the sample sends both for forward compatibility. In a Remote
+> MCP topology the captured IP is the AI provider's, not the buyer's
+> true client IP — agentic commerce shifts buyer-IP collection to the
+> AI host. Production deployments serving real buyer traffic should pass
+> the buyer's true IP; for high-volume production usage, contact Shopify
+> to discuss partner-program options.
 
 ```bash
 ucp checkout create --business "$UCP_BUSINESS" \

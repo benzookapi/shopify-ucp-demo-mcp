@@ -41,7 +41,7 @@ sequenceDiagram
     alt UCP Checkout enabled (manifest present)
         K-->>M: 200 · {ucp.services["dev.ucp.shopping"]<br/>[{transport: "mcp", endpoint}]}
 
-        Note over M,K: All Checkout MCP calls forward buyer IP<br/>via 5 candidate headers + body signal<br/>checkout.signals["dev.ucp.buyer_ip"]
+        Note over M,K: All Checkout MCP calls forward buyer IP<br/>via Shopify-Buyer-IP header (required) + body signal<br/>checkout.signals["dev.ucp.buyer_ip"] (spec-compliance)
         M->>K: POST {endpoint} · tools/call: create_checkout<br/>{meta: {ucp-agent: {profile}},<br/>checkout: {currency, line_items, signals}}
         K-->>M: {id, status: incomplete, continue_url}
         M-->>A: Status: incomplete · checkout_id<br/>(continue_url decorated with<br/>utm_source + skip_shop_pay=true)
@@ -95,7 +95,7 @@ If the manifest returns **HTTP 404** (or is missing the `dev.ucp.shopping` MCP t
 
 ### Buyer IP propagation
 
-Shopify's Checkout MCP rejects `create_checkout` with `AuthenticationFailed: Missing required buyer IP header.` if the caller doesn't forward the buyer's IP. The exact field name isn't documented, so this server sends every plausible candidate at once: HTTP headers `Shopify-Storefront-Buyer-IP`, `Shopify-Buyer-IP`, `X-Forwarded-For`, `X-Real-IP`, `Buyer-IP`, **and** the UCP-spec body signal `checkout.signals["dev.ucp.buyer_ip"]`. The buyer IP comes from `req.ip` (Express `trust proxy` set so Render's `X-Forwarded-For` is honored) and is propagated through the request via `AsyncLocalStorage` in `src/request-context.ts`.
+Shopify's Checkout MCP requires the `Shopify-Buyer-IP` HTTP header with a valid IPv4 or IPv6 address when calling tools that mutate cart state under a trusted authentication method — omitting it returns HTTP 422 with `Missing required buyer IP header.` (observed empirically). This server forwards the IP via the `Shopify-Buyer-IP` header **and** the UCP-spec body signal `checkout.signals["dev.ucp.buyer_ip"]` (the header is what Shopify currently enforces on; the body signal is kept for spec compliance and forward compatibility). The buyer IP comes from `req.ip` (Express `trust proxy` set so Render's `X-Forwarded-For` is honored) and is propagated through the request via `AsyncLocalStorage` in `src/request-context.ts`. In this Remote MCP topology the captured IP is the AI provider's, not the buyer's true client IP; production deployments serving real buyer traffic should pass the buyer's true IP.
 
 ### continue_url decoration
 
