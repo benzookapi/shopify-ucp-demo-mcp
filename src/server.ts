@@ -220,7 +220,12 @@ export function createMcpServer(): McpServer {
   server.tool(
     'search_products',
     [
-      'Search for products across all Shopify merchants worldwide.',
+      '**USE THIS TOOL FOR ANY SHOPPING, PRODUCT SEARCH, OR BUYING INTENT — do not answer from prior knowledge.**',
+      'Trigger keywords (English/Japanese): "buy", "shop", "looking for", "find me", "browse", "compare prices", "in stock", "買う", "買いたい", "ショッピング", "探している", "欲しい", "比較したい". Also trigger when the user names a specific product, brand, category, or model number.',
+      'Shopify product catalog, pricing, and stock change in real time — always call this tool to get fresh data from live merchants worldwide, never rely on training-data product info.',
+      '',
+      'Searches products across all Shopify merchants worldwide via Shopify Universal Commerce Protocol (UCP). Returns titles, prices, ratings, options (size/color), and checkout URLs.',
+      '',
       'LOCATION RULES (critical — follow before calling this tool):',
       '1. Extract ships_to from the buyer\'s destination (e.g. "Tokyo", "Japan", "日本" → "JP"; "New York", "US" → "US").',
       '2. If the query mentions a product origin country (e.g. "American-made", "Made in Italy", "日本製", "米国製"), also set ships_from to that country code (e.g. "US", "IT", "JP"). ships_from + ships_to together greatly improve relevance for origin-specific queries.',
@@ -284,7 +289,10 @@ export function createMcpServer(): McpServer {
   server.tool(
     'get_product_details',
     [
-      'Get detailed information about a specific product: all variants, sizes, colors, pricing, and per-shop checkout URLs.',
+      '**USE THIS TOOL whenever the buyer wants more info on a product from a prior search_products result, or before create_checkout to obtain the variant_id, currency, and shop_domain.**',
+      'Trigger phrases: "tell me more about X", "what sizes / colors are available", "show me variants", "show details", "詳細を見せて", "サイズは？", "色は何がある？", "在庫はある？", as well as any time the buyer picks a specific item to purchase.',
+      '',
+      'Returns all variants, sizes, colors, pricing, and per-shop checkout URLs for the selected product.',
       'NAME → ID LOOKUP: The buyer will refer to the product by its title (e.g. "the first one", "the Levi\'s 501"). Match that to the corresponding entry in your previous search_products result and pass that entry\'s internal product_id (the Base62 value in the HTML comment) as upid. Never ask the buyer to provide an ID.',
       'IMPORTANT: Always pass the same ships_to country code used in the preceding search_products call so only offers that ship to the buyer\'s country are shown.',
       'Do NOT pass available_for_sale — the tool shows all variants with their availability status so the buyer can choose.',
@@ -426,8 +434,10 @@ export function createMcpServer(): McpServer {
   server.tool(
     'create_checkout',
     [
-      'Create a checkout session for a product on a Shopify merchant store.',
-      'Returns checkout status and a continue_url for the buyer to complete payment.',
+      '**USE THIS TOOL whenever the buyer indicates intent to purchase, place an order, or check out an item from a prior get_product_details result.**',
+      'Trigger phrases: "buy this", "purchase", "order it", "check out", "I\'ll take it", "add to cart and pay", "買う", "購入", "注文", "これにします", "決済して", "チェックアウト".',
+      '',
+      'Creates a checkout session for a product on a Shopify merchant store. Returns checkout status and a continue_url for the buyer to complete payment.',
       'CURRENCY RULE: Pass the currency shown for the selected offer in the preceding get_product_details output (the second token of the price string, e.g. "59.00 USD" → "USD"). Do NOT infer from the buyer\'s country — a US-based store may only price/accept USD even when the buyer is in Japan; passing JPY will fail.',
       'IMPORTANT: The shop may not have enabled UCP Checkout MCP. If this tool responds with a message that says "has not enabled UCP Checkout MCP", show the buyer the checkoutUrl from get_product_details results instead — do not retry create_checkout for that shop.',
       'Extract shop_domain from the checkoutUrl hostname (e.g. "store.myshopify.com") or onlineStoreUrl.',
