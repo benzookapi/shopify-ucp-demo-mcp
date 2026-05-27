@@ -21,9 +21,10 @@ pnpm run harness
 
 The harness calls this sample's wrapping code, classifies missing catalog
 matches, response-shape changes, checkout URL gaps, and `/.well-known/ucp`
-discovery outcomes, then writes reports under `harness/reports/`. The CLI
-remains the lower-level tool for verifying Shopify's canonical UCP commands
-directly.
+discovery outcomes, then writes redacted reports under `harness/reports/`.
+The CLI remains the lower-level tool for verifying Shopify's canonical UCP
+commands directly. Keep store-specific cases under ignored `harness/private/`
+when you need local merchant debugging.
 
 > ⚠️ The CLI calls Shopify's UCP endpoints directly — **not** this
 > Render-hosted demo. The point is to verify the wire format and round-trip
@@ -66,7 +67,7 @@ pointing at the merchant's public storefront URL. The CLI handles
 [`resolveCheckoutMcpUrl`](../src/checkout.ts) does internally.
 
 ```bash
-export UCP_BUSINESS="https://pojstudio.com"   # one merchant, used as default
+export UCP_BUSINESS="https://merchant.example"   # replace with one merchant, used as default
 ```
 
 You can also pass `--business` on every call instead.

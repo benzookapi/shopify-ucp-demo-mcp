@@ -79,7 +79,7 @@ If you need to compare more shops for a single product, consider calling `get_gl
 
 ## 5. Discover Checkout MCP via /.well-known/ucp and fall back gracefully
 
-Not every Shopify store has enabled the UCP Checkout MCP. The UCP spec defines `https://{shop}/.well-known/ucp` as the discovery document — fetch it once per shop and read `ucp.services["dev.ucp.shopping"][].endpoint` to find the canonical Checkout MCP URL. This matters because the Catalog MCP usually surfaces the shop's public custom domain (e.g. `pojstudio.com`), while the actual `/api/ucp/mcp` route lives on the `*.myshopify.com` host — only the manifest tells you the mapping.
+Not every Shopify store has enabled the UCP Checkout MCP. The UCP spec defines `https://{shop}/.well-known/ucp` as the discovery document — fetch it once per shop and read `ucp.services["dev.ucp.shopping"][].endpoint` to find the canonical Checkout MCP URL. This matters because the Catalog MCP usually surfaces the shop's public custom domain, while the actual `/api/ucp/mcp` route may live on a different `*.myshopify.com` host — only the manifest tells you the mapping.
 
 When the manifest returns **HTTP 404** (or omits the `dev.ucp.shopping` MCP transport), treat it as a clear "UCP not enabled on this shop" signal. Throw a typed error (see `UcpNotSupportedError` in [src/checkout.ts](../src/checkout.ts)) so the caller can catch it and fall back to the `checkoutUrl` cart permalink from the Catalog MCP response.
 

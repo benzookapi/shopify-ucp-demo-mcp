@@ -89,7 +89,7 @@ The server handles both and extracts `checkoutUrl` from whichever is present.
 
 ### Checkout MCP discovery and fallback
 
-The canonical Checkout MCP endpoint is discovered via the UCP manifest at `https://{shop}/.well-known/ucp` (see `src/checkout.ts` `resolveCheckoutMcpUrl`). The manifest is required because the Catalog MCP often surfaces a shop's public custom domain (e.g. `pojstudio.com`), while the actual `/api/ucp/mcp` route lives on the `*.myshopify.com` host — only the manifest tells us the mapping. Resolved endpoints are cached in-process so repeat calls don't re-fetch.
+The canonical Checkout MCP endpoint is discovered via the UCP manifest at `https://{shop}/.well-known/ucp` (see `src/checkout.ts` `resolveCheckoutMcpUrl`). The manifest is required because the Catalog MCP often surfaces a shop's public custom domain, while the actual `/api/ucp/mcp` route may live on a different `*.myshopify.com` host — only the manifest tells us the mapping. Resolved endpoints are cached in-process so repeat calls don't re-fetch.
 
 If the manifest returns **HTTP 404** (or is missing the `dev.ucp.shopping` MCP transport), the server throws `UcpNotSupportedError` and the `create_checkout` tool responds with a buyer-facing message telling the AI to fall back to the standard `checkoutUrl` cart permalink from the Catalog MCP response.
 

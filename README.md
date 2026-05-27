@@ -79,6 +79,12 @@ JSON and Markdown report with:
   `shipping_filter_too_strict`, `response_shape_changed`, and
   `checkout_ucp_unsupported`
 
+Committed harness cases do not hardcode specific merchant names or domains.
+Merchant discovery checks use merchants returned by live Catalog results, and
+reports redact live merchant domains and endpoints by default. If you need to
+debug a specific merchant, keep that case under ignored `harness/private/` and
+run with `--include-merchant-details` only for local diagnosis.
+
 Run every sample case:
 
 ```bash
@@ -100,6 +106,12 @@ pnpm run harness -- --list
 Reports are written to `harness/reports/` and are intentionally ignored by Git.
 Use them to debug cases where an expected product, merchant, checkout URL, or
 UCP shopping endpoint does not appear.
+
+To include live merchant domains and endpoints in local-only reports:
+
+```bash
+pnpm run harness -- --include-merchant-details
+```
 
 ## Setup
 
