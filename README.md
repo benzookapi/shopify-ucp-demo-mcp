@@ -64,6 +64,43 @@ For implementation tips on improving search quality, ratings, and checkout handl
 
 To verify the wire format using Shopify's official [`@shopify/ucp-cli`](https://shopify.dev/docs/agents/get-started/quickstart) — including the spec-named tools (`search_catalog`, `get_product`, `create_checkout`, etc.) that this sample wraps — see [docs/test-with-ucp-cli.md](docs/test-with-ucp-cli.md).
 
+## UCP Demo Harness
+
+The `harness/` directory contains a lightweight regression and diagnosis
+harness for demo-quality checks. It runs saved buyer-intent cases against the
+same Catalog and Checkout discovery code used by the MCP server, then writes a
+JSON and Markdown report with:
+
+- Catalog payloads and response summaries
+- `products[]` vs `variants[]` response-shape detection
+- checkout URL and merchant host coverage
+- `/.well-known/ucp` discovery classification
+- likely issue codes such as `catalog_no_match`,
+  `shipping_filter_too_strict`, `response_shape_changed`, and
+  `checkout_ucp_unsupported`
+
+Run every sample case:
+
+```bash
+pnpm run harness
+```
+
+Run one case:
+
+```bash
+pnpm run harness -- --case harness/cases/us-made-denim-to-jp.json
+```
+
+List cases without making network calls:
+
+```bash
+pnpm run harness -- --list
+```
+
+Reports are written to `harness/reports/` and are intentionally ignored by Git.
+Use them to debug cases where an expected product, merchant, checkout URL, or
+UCP shopping endpoint does not appear.
+
 ## Setup
 
 ### 1. Get Shopify API credentials

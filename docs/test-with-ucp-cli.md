@@ -12,6 +12,19 @@ works one tool call at a time from the command line.
 The full quickstart lives at
 [shopify.dev/docs/agents/get-started/quickstart](https://shopify.dev/docs/agents/get-started/quickstart).
 
+For repeated demo regression checks, use this repository's UCP Demo Harness
+instead of retyping the same commands by hand:
+
+```bash
+pnpm run harness
+```
+
+The harness calls this sample's wrapping code, classifies missing catalog
+matches, response-shape changes, checkout URL gaps, and `/.well-known/ucp`
+discovery outcomes, then writes reports under `harness/reports/`. The CLI
+remains the lower-level tool for verifying Shopify's canonical UCP commands
+directly.
+
 > ⚠️ The CLI calls Shopify's UCP endpoints directly — **not** this
 > Render-hosted demo. The point is to verify the wire format and round-trip
 > the spec tools. If a CLI command succeeds but the demo fails (or vice
