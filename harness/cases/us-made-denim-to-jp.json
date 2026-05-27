@@ -1,0 +1,25 @@
+{
+  "name": "US-made denim shipping to Japan",
+  "description": "Checks the high-value demo path where a buyer in Tokyo searches for premium American denim.",
+  "search": {
+    "query": "American-made selvedge denim jeans W32 L32",
+    "context": "buyer in Tokyo, Japan looking for authentic American-made premium selvedge denim jeans, prefers known US denim brands, wants W32 L32 or similar, ships from US to JP",
+    "ships_to": "JP",
+    "ships_from": "US",
+    "available_for_sale": true,
+    "max_price": 250,
+    "limit": 5
+  },
+  "expectations": {
+    "minOffers": 1,
+    "minCheckoutUrls": 1,
+    "requireProductsOrVariants": true,
+    "requireProductDetails": true,
+    "minProductDetailOffers": 1,
+    "allowUcpUnsupported": true
+  },
+  "discovery": {
+    "fromSearchResults": true,
+    "maxMerchants": 2
+  }
+}

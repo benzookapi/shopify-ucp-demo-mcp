@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:harness": "tsc --noEmit -p tsconfig.harness.json",
+    "harness": "tsx harness/run-cases.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

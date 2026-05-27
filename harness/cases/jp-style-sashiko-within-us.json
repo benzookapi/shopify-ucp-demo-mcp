@@ -1,0 +1,23 @@
+{
+  "name": "Japanese-style sashiko jacket within US",
+  "description": "Checks the JP-style-to-US demo path without requiring the merchant to ship internationally.",
+  "search": {
+    "query": "Japanese-style cotton sashiko jacket size M",
+    "context": "buyer in California, United States seeking a Japanese-style cotton sashiko jacket in size M, prefers natural fabric and understated indigo styling, ships within the US",
+    "ships_to": "US",
+    "available_for_sale": true,
+    "max_price": 150,
+    "limit": 5
+  },
+  "expectations": {
+    "minOffers": 1,
+    "minCheckoutUrls": 1,
+    "expectedTitleTerms": ["sashiko", "jacket"],
+    "requireProductsOrVariants": true,
+    "allowUcpUnsupported": true
+  },
+  "discovery": {
+    "fromSearchResults": true,
+    "maxMerchants": 2
+  }
+}

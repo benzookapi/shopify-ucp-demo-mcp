@@ -14,6 +14,8 @@ build/
 npm-debug.log*
 package-lock.json
 pnpm-lock.yaml
+harness/reports/*.json
+harness/reports/*.md
 
 # OS
 .DS_Store

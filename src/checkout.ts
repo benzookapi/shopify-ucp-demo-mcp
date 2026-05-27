@@ -38,6 +38,117 @@ function normalizeHost(input: string): string {
   return input.replace(/^https?:\/\//, '').split('/')[0];
 }
 
+export interface CheckoutDiscoveryDiagnostic {
+  shopDomain: string;
+  manifestUrl: string;
+  status:
+    | 'supported'
+    | 'manifest_missing'
+    | 'manifest_malformed'
+    | 'shopping_service_missing'
+    | 'network_fallback'
+    | 'http_fallback';
+  httpStatus?: number;
+  endpoint?: string;
+  reason?: string;
+}
+
+function fallbackCheckoutMcpUrl(host: string): string {
+  return `https://${host.includes('.') ? host : `${host}.myshopify.com`}/api/ucp/mcp`;
+}
+
+function findShoppingMcpEndpoint(manifest: {
+  ucp?: {
+    services?: {
+      'dev.ucp.shopping'?: Array<{ transport?: string; endpoint?: string }>;
+    };
+  };
+}): string | undefined {
+  const services = manifest?.ucp?.services?.['dev.ucp.shopping'] ?? [];
+  return services.find((s) => s.transport === 'mcp' && s.endpoint)?.endpoint;
+}
+
+export async function diagnoseCheckoutDiscovery(shopDomain: string): Promise<CheckoutDiscoveryDiagnostic> {
+  const host = normalizeHost(shopDomain);
+  const manifestUrl = `https://${host}/.well-known/ucp`;
+  let response: Response;
+
+  try {
+    response = await fetch(manifestUrl, {
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow',
+    });
+  } catch (err) {
+    return {
+      shopDomain: host,
+      manifestUrl,
+      status: 'network_fallback',
+      endpoint: fallbackCheckoutMcpUrl(host),
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (response.status === 404) {
+    return {
+      shopDomain: host,
+      manifestUrl,
+      status: 'manifest_missing',
+      httpStatus: response.status,
+      reason: 'no /.well-known/ucp manifest',
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      shopDomain: host,
+      manifestUrl,
+      status: 'http_fallback',
+      httpStatus: response.status,
+      endpoint: fallbackCheckoutMcpUrl(host),
+      reason: `/.well-known/ucp returned HTTP ${response.status}`,
+    };
+  }
+
+  let manifest: {
+    ucp?: {
+      services?: {
+        'dev.ucp.shopping'?: Array<{ transport?: string; endpoint?: string }>;
+      };
+    };
+  };
+
+  try {
+    manifest = (await response.json()) as typeof manifest;
+  } catch (err) {
+    return {
+      shopDomain: host,
+      manifestUrl,
+      status: 'manifest_malformed',
+      httpStatus: response.status,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const endpoint = findShoppingMcpEndpoint(manifest);
+  if (!endpoint) {
+    return {
+      shopDomain: host,
+      manifestUrl,
+      status: 'shopping_service_missing',
+      httpStatus: response.status,
+      reason: 'manifest has no dev.ucp.shopping MCP endpoint',
+    };
+  }
+
+  return {
+    shopDomain: host,
+    manifestUrl,
+    status: 'supported',
+    httpStatus: response.status,
+    endpoint,
+  };
+}
+
 // Resolve the canonical Checkout MCP endpoint via /.well-known/ucp.
 //
 // Why this exists: Catalog MCP often surfaces a shop's public custom domain
@@ -68,7 +179,7 @@ export async function resolveCheckoutMcpUrl(shopDomain: string): Promise<string>
   } catch (err) {
     console.error(`[checkout] /.well-known/ucp fetch failed for ${host}:`, err);
     // Network error — degrade to naive heuristic rather than failing hard.
-    const fallback = `https://${host.includes('.') ? host : `${host}.myshopify.com`}/api/ucp/mcp`;
+    const fallback = fallbackCheckoutMcpUrl(host);
     endpointCache.set(host, fallback);
     return fallback;
   }
@@ -78,7 +189,7 @@ export async function resolveCheckoutMcpUrl(shopDomain: string): Promise<string>
   }
   if (!response.ok) {
     console.error(`[checkout] /.well-known/ucp returned ${response.status} for ${host}`);
-    const fallback = `https://${host.includes('.') ? host : `${host}.myshopify.com`}/api/ucp/mcp`;
+    const fallback = fallbackCheckoutMcpUrl(host);
     endpointCache.set(host, fallback);
     return fallback;
   }
@@ -97,17 +208,16 @@ export async function resolveCheckoutMcpUrl(shopDomain: string): Promise<string>
     throw new UcpNotSupportedError(host, 'malformed manifest');
   }
 
-  const services = manifest?.ucp?.services?.['dev.ucp.shopping'] ?? [];
   // Pick the MCP transport entry — UCP may advertise multiple transports
   // (mcp, embedded, etc.); we only speak MCP here.
-  const mcpService = services.find((s) => s.transport === 'mcp' && s.endpoint);
-  if (!mcpService?.endpoint) {
+  const endpoint = findShoppingMcpEndpoint(manifest);
+  if (!endpoint) {
     throw new UcpNotSupportedError(host, 'manifest has no dev.ucp.shopping MCP endpoint');
   }
 
-  endpointCache.set(host, mcpService.endpoint);
-  console.error(`[checkout] resolved ${host} → ${mcpService.endpoint}`);
-  return mcpService.endpoint;
+  endpointCache.set(host, endpoint);
+  console.error(`[checkout] resolved ${host} → ${endpoint}`);
+  return endpoint;
 }
 
 let requestId = 0;

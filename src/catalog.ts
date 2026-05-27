@@ -113,9 +113,51 @@ export interface SearchProductsParams {
   limit?: number;
 }
 
-export async function searchGlobalProducts(params: SearchProductsParams) {
+export interface CatalogSearchSummary {
+  totalOffers: number;
+  offersWithProducts: number;
+  offersWithVariants: number;
+  offersWithCheckoutUrl: number;
+  offersWithProductPageUrl: number;
+  currencies: string[];
+  merchantHosts: string[];
+  productTitles: string[];
+  responseShape: 'offers' | 'unknown';
+}
+
+export interface CatalogProductDetailsSummary {
+  offerCount: number;
+  usesProductsSchema: boolean;
+  usesVariantsSchema: boolean;
+  offersWithCheckoutUrl: number;
+  currencies: string[];
+  merchantHosts: string[];
+  productTitle?: string;
+}
+
+function hostFromUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function currencyFromPrice(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const price = value as Record<string, unknown>;
+  const currency = price.currencyCode ?? price.currency;
+  return typeof currency === 'string' && currency.length > 0 ? currency : undefined;
+}
+
+function uniqueSorted(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((v): v is string => Boolean(v)))].sort();
+}
+
+export function buildSearchGlobalProductsArgs(params: SearchProductsParams): Record<string, unknown> {
   const savedCatalog = process.env.SHOPIFY_CATALOG_ID;
-  const args: Record<string, unknown> = {
+  return {
     query: params.query,
     context: params.context,
     ...(params.ships_to && { ships_to: params.ships_to }),
@@ -126,6 +168,91 @@ export async function searchGlobalProducts(params: SearchProductsParams) {
     ...(params.limit !== undefined && { limit: params.limit }),
     ...(savedCatalog && { saved_catalog: savedCatalog }),
   };
+}
+
+export function summarizeCatalogSearchResult(result: unknown): CatalogSearchSummary {
+  const raw = result as Record<string, unknown> | null;
+  const offers = (Array.isArray(raw?.offers) ? raw.offers : []) as Record<string, unknown>[];
+  const currencies: Array<string | undefined> = [];
+  const merchantHosts: Array<string | undefined> = [];
+  let offersWithProducts = 0;
+  let offersWithVariants = 0;
+  let offersWithCheckoutUrl = 0;
+  let offersWithProductPageUrl = 0;
+
+  for (const offer of offers) {
+    const products = (offer.products as Record<string, unknown>[] | undefined) ?? [];
+    const variants = (offer.variants as Record<string, unknown>[] | undefined) ?? [];
+    if (products.length > 0) offersWithProducts += 1;
+    if (variants.length > 0) offersWithVariants += 1;
+    if (typeof offer.url === 'string') offersWithProductPageUrl += 1;
+
+    const childOffers = products.length > 0 ? products : variants;
+    if (childOffers.some((child) => typeof child.checkoutUrl === 'string')) {
+      offersWithCheckoutUrl += 1;
+    }
+
+    for (const child of childOffers) {
+      currencies.push(currencyFromPrice(child.price));
+      const shop = child.shop as Record<string, unknown> | undefined;
+      merchantHosts.push(
+        hostFromUrl(shop?.onlineStoreUrl) ??
+          hostFromUrl(child.variantUrl) ??
+          hostFromUrl(child.checkoutUrl)
+      );
+    }
+
+    const priceRange = offer.priceRange as Record<string, Record<string, unknown>> | undefined;
+    currencies.push(currencyFromPrice(priceRange?.min));
+  }
+
+  return {
+    totalOffers: offers.length,
+    offersWithProducts,
+    offersWithVariants,
+    offersWithCheckoutUrl,
+    offersWithProductPageUrl,
+    currencies: uniqueSorted(currencies),
+    merchantHosts: uniqueSorted(merchantHosts),
+    productTitles: offers
+      .map((offer) => offer.title)
+      .filter((title): title is string => typeof title === 'string'),
+    responseShape: Array.isArray(raw?.offers) ? 'offers' : 'unknown',
+  };
+}
+
+export function summarizeProductDetailsResult(result: unknown): CatalogProductDetailsSummary {
+  const raw = result as Record<string, unknown> | null;
+  const product = ((raw?.product as Record<string, unknown> | undefined) ?? raw ?? {}) as Record<string, unknown>;
+  const products = (product.products as Record<string, unknown>[] | undefined) ?? [];
+  const variants = (product.variants as Record<string, unknown>[] | undefined) ?? [];
+  const offers = products.length > 0 ? products : variants;
+  const currencies: Array<string | undefined> = [];
+  const merchantHosts: Array<string | undefined> = [];
+
+  for (const offer of offers) {
+    currencies.push(currencyFromPrice(offer.price));
+    const shop = offer.shop as Record<string, unknown> | undefined;
+    merchantHosts.push(
+      hostFromUrl(shop?.onlineStoreUrl) ??
+        hostFromUrl(offer.variantUrl) ??
+        hostFromUrl(offer.checkoutUrl)
+    );
+  }
+
+  return {
+    offerCount: offers.length,
+    usesProductsSchema: products.length > 0,
+    usesVariantsSchema: products.length === 0 && variants.length > 0,
+    offersWithCheckoutUrl: offers.filter((offer) => typeof offer.checkoutUrl === 'string').length,
+    currencies: uniqueSorted(currencies),
+    merchantHosts: uniqueSorted(merchantHosts),
+    productTitle: typeof product.title === 'string' ? product.title : undefined,
+  };
+}
+
+export async function searchGlobalProducts(params: SearchProductsParams) {
+  const args = buildSearchGlobalProductsArgs(params);
   return callCatalogMcp('search_global_products', args);
 }
 

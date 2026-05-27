@@ -1,0 +1,12 @@
+{
+  "name": "Known merchant UCP discovery",
+  "description": "Classifies /.well-known/ucp discovery for a merchant commonly used in demo debugging.",
+  "expectations": {
+    "requireDiscovery": true,
+    "allowUcpUnsupported": true
+  },
+  "discovery": {
+    "merchantHosts": ["pojstudio.com"],
+    "maxMerchants": 1
+  }
+}
