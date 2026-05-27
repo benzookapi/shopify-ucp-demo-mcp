@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { HarnessRunResult } from './types.js';
+import type { HarnessCaseResult, HarnessRunResult } from './types.js';
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
@@ -8,6 +8,59 @@ function sanitizeFilePart(value: string): string {
 
 function formatList(values: string[]): string {
   return values.length > 0 ? values.join(', ') : 'none';
+}
+
+function redactMerchantString(value: string | undefined): string | undefined {
+  if (!value) return value;
+  return value
+    .replace(/https?:\/\/[^\s|)]+/g, 'https://[redacted-merchant]')
+    .replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/gi, '[redacted-merchant]');
+}
+
+function redactCaseResult(result: HarnessCaseResult): HarnessCaseResult {
+  const merchantLabels = new Map<string, string>();
+  const labelFor = (host: string): string => {
+    const existing = merchantLabels.get(host);
+    if (existing) return existing;
+    const label = `merchant-${merchantLabels.size + 1}`;
+    merchantLabels.set(host, label);
+    return label;
+  };
+
+  return {
+    ...result,
+    searchSummary: result.searchSummary
+      ? {
+          ...result.searchSummary,
+          merchantHosts: result.searchSummary.merchantHosts.map(labelFor),
+        }
+      : undefined,
+    detailSummary: result.detailSummary
+      ? {
+          ...result.detailSummary,
+          merchantHosts: result.detailSummary.merchantHosts.map(labelFor),
+        }
+      : undefined,
+    discoveryDiagnostics: result.discoveryDiagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      shopDomain: labelFor(diagnostic.shopDomain),
+      manifestUrl: `https://${labelFor(diagnostic.shopDomain)}/.well-known/ucp`,
+      endpoint: redactMerchantString(diagnostic.endpoint),
+      reason: redactMerchantString(diagnostic.reason),
+    })),
+    assertions: result.assertions.map((assertion) => ({
+      ...assertion,
+      message: redactMerchantString(assertion.message) ?? assertion.message,
+    })),
+    error: redactMerchantString(result.error),
+  };
+}
+
+function redactRunResult(run: HarnessRunResult): HarnessRunResult {
+  return {
+    ...run,
+    results: run.results.map(redactCaseResult),
+  };
 }
 
 export function renderMarkdownReport(run: HarnessRunResult): string {
@@ -89,14 +142,16 @@ export function renderMarkdownReport(run: HarnessRunResult): string {
 export async function writeReports(
   run: HarnessRunResult,
   reportDir: string,
+  options: { includeMerchantDetails?: boolean } = {},
 ): Promise<{ jsonPath: string; markdownPath: string }> {
   await mkdir(reportDir, { recursive: true });
+  const reportRun = options.includeMerchantDetails ? run : redactRunResult(run);
   const stamp = sanitizeFilePart(run.generatedAt.replace(/[:.]/g, '-'));
   const jsonPath = join(reportDir, `ucp-demo-harness-${stamp}.json`);
   const markdownPath = join(reportDir, `ucp-demo-harness-${stamp}.md`);
 
-  await writeFile(jsonPath, `${JSON.stringify(run, null, 2)}\n`, 'utf8');
-  await writeFile(markdownPath, renderMarkdownReport(run), 'utf8');
+  await writeFile(jsonPath, `${JSON.stringify(reportRun, null, 2)}\n`, 'utf8');
+  await writeFile(markdownPath, renderMarkdownReport(reportRun), 'utf8');
 
   return { jsonPath, markdownPath };
 }

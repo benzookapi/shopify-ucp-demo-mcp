@@ -29,6 +29,7 @@ interface CliOptions {
   casesDir: string;
   reportDir: string;
   list: boolean;
+  includeMerchantDetails: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -36,6 +37,7 @@ function parseArgs(argv: string[]): CliOptions {
     casesDir: defaultCasesDir,
     reportDir: defaultReportDir,
     list: false,
+    includeMerchantDetails: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -54,6 +56,8 @@ function parseArgs(argv: string[]): CliOptions {
       i += 1;
     } else if (arg === '--list') {
       options.list = true;
+    } else if (arg === '--include-merchant-details') {
+      options.includeMerchantDetails = true;
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
       process.exit(0);
@@ -85,6 +89,8 @@ Options:
   --cases-dir <path>   Run all *.json case files in a directory
   --report-dir <path>  Write JSON and Markdown reports to this directory
   --list               List discovered cases without running network calls
+  --include-merchant-details
+                       Write live merchant domains and endpoints to reports
 `);
 }
 
@@ -260,7 +266,9 @@ async function main(): Promise<void> {
     results,
   };
 
-  const paths = await writeReports(run, options.reportDir);
+  const paths = await writeReports(run, options.reportDir, {
+    includeMerchantDetails: options.includeMerchantDetails,
+  });
   console.log(`[harness] wrote ${paths.markdownPath}`);
   console.log(`[harness] wrote ${paths.jsonPath}`);
 

@@ -33,7 +33,7 @@ export class UcpNotSupportedError extends Error {
 // don't re-fetch the manifest. Shops rarely change their UCP routing.
 const endpointCache = new Map<string, string>();
 
-// Strip protocol/path and return the bare host (e.g. "pojstudio.com").
+// Strip protocol/path and return the bare host (e.g. "merchant.example").
 function normalizeHost(input: string): string {
   return input.replace(/^https?:\/\//, '').split('/')[0];
 }
@@ -151,9 +151,9 @@ export async function diagnoseCheckoutDiscovery(shopDomain: string): Promise<Che
 
 // Resolve the canonical Checkout MCP endpoint via /.well-known/ucp.
 //
-// Why this exists: Catalog MCP often surfaces a shop's public custom domain
-// (e.g. pojstudio.com), but the /api/ucp/mcp route is canonically hosted on
-// the *.myshopify.com domain (e.g. pieces-of-japan.myshopify.com). The
+// Why this exists: Catalog MCP often surfaces a shop's public custom domain,
+// but the /api/ucp/mcp route may be canonically hosted on a different
+// *.myshopify.com domain. The
 // UCP spec defines /.well-known/ucp on the public domain as the discovery
 // document that points to the actual endpoint, so we resolve it before
 // every Checkout MCP call (cached after the first hit).

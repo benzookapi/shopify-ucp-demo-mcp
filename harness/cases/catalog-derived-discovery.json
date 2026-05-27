@@ -1,0 +1,23 @@
+{
+  "name": "Catalog-derived merchant discovery",
+  "description": "Checks merchant UCP discovery using merchants returned by a live catalog search, without hardcoding a specific store.",
+  "search": {
+    "query": "handmade ceramic mug gift",
+    "context": "buyer in New York, United States looking for a handmade ceramic mug as a gift, prefers ready-to-ship items from merchants that can ship within the US",
+    "ships_to": "US",
+    "available_for_sale": true,
+    "max_price": 60,
+    "limit": 5
+  },
+  "expectations": {
+    "minOffers": 1,
+    "minCheckoutUrls": 1,
+    "requireProductsOrVariants": true,
+    "requireDiscovery": true,
+    "allowUcpUnsupported": true
+  },
+  "discovery": {
+    "fromSearchResults": true,
+    "maxMerchants": 2
+  }
+}
