@@ -6,7 +6,7 @@ A Remote MCP server that lets any AI agent (Claude, ChatGPT, etc.) search Shopif
 
 | Tool | Description |
 |---|---|
-| `search_products` | Search hundreds of millions of products across all Shopify merchants |
+| `search_products` | Search hundreds of millions of products across all Shopify merchants by text or image similarity |
 | `get_product_details` | Get full variant details and checkout URLs for a specific product |
 | `create_checkout` | Start a checkout session on a merchant's store |
 | `update_checkout` | Add buyer info, shipping address, select shipping method |
@@ -30,6 +30,20 @@ canonical Universal Commerce Protocol tools defined by Shopify. The mapping is:
 Every outgoing call carries `meta.ucp-agent.profile` (see `UCP_AGENT_PROFILE` below).
 Calls that mutate state (`complete_checkout`, `cancel_checkout`) also carry
 `meta.idempotency-key` so retries are safe.
+
+### Image similarity search
+
+`search_products` supports Shopify Global Catalog similarity search by accepting
+a base64-encoded image:
+
+- `image_base64` — raw base64 image data, without a `data:` URL prefix
+- `image_content_type` — MIME type such as `image/jpeg`, `image/png`, or
+  `image/webp`
+
+When `query` is also provided, Catalog uses the text to narrow the visual
+similarity search. When only `image_base64` is provided, Catalog searches for
+visually similar products. Continue to pass `context` and `ships_to` so results
+are relevant and shippable for the buyer.
 
 ### No cart layer — by design
 

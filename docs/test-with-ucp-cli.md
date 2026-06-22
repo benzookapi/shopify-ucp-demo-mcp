@@ -111,7 +111,44 @@ ucp catalog search \
 
 Expected: all returned `priceRange.min.amount` values fall in `[20, 80]`.
 
-### 4.3 `catalog get_product` — by UPID
+### 4.3 `catalog search` — image similarity
+
+This sample wraps Shopify Global Catalog image similarity by accepting
+`image_base64` and `image_content_type` on `search_products`. The underlying
+Catalog payload uses `like[].image`:
+
+```bash
+IMAGE_BASE64="$(base64 -i ./reference-product.jpg | tr -d '\n')"
+
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -d "$(cat <<JSON
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "search_products",
+    "arguments": {
+      "query": "similar style under $100",
+      "context": "buyer in California looking for visually similar products that ship within the US",
+      "image_base64": "$IMAGE_BASE64",
+      "image_content_type": "image/jpeg",
+      "ships_to": "US",
+      "available_for_sale": true,
+      "limit": 5
+    }
+  },
+  "id": 1
+}
+JSON
+)"
+```
+
+Expected: results are visually similar to the reference image and still include
+buyer-facing titles, prices, checkout URLs, and Markdown product images when
+Catalog returns image URLs.
+
+### 4.4 `catalog get_product` — by UPID
 
 Spec name is `get_product`; Catalog MCP calls it `get_global_product_details`
 and this sample wraps it as `get_product_details`. Use the Base62 ID from
