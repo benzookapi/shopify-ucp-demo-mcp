@@ -9,6 +9,24 @@ function nextId() {
   return ++requestId;
 }
 
+function redactCatalogLogValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactCatalogLogValue);
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  const record = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (key === 'data' && typeof child === 'string' && record.content_type) {
+      out[key] = `<base64:${child.length} chars>`;
+    } else {
+      out[key] = redactCatalogLogValue(child);
+    }
+  }
+  return out;
+}
+
 // Parse MCP response — Streamable HTTP may return either plain JSON
 // or a newline-delimited SSE stream ("data: {...}\n\n").
 async function parseResponse(response: Response): Promise<unknown> {
@@ -58,7 +76,7 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   };
 
   // Debug: log the exact args being sent to Catalog MCP
-  console.error(`[catalog] ${toolName} args:`, JSON.stringify(argsWithMeta));
+  console.error(`[catalog] ${toolName} args:`, JSON.stringify(redactCatalogLogValue(argsWithMeta)));
 
   const response = await fetch(CATALOG_MCP_URL, {
     method: 'POST',
@@ -103,7 +121,7 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
 }
 
 export interface SearchProductsParams {
-  query: string;
+  query?: string;
   context: string;
   ships_to?: string;          // ISO 2-letter country code (destination)
   ships_from?: string;        // ISO 2-letter country code (origin)
@@ -111,6 +129,10 @@ export interface SearchProductsParams {
   min_price?: number;
   max_price?: number;
   limit?: number;
+  similar_image?: {
+    content_type: string;
+    data: string;
+  };
 }
 
 export interface CatalogSearchSummary {
@@ -158,8 +180,18 @@ function uniqueSorted(values: Array<string | undefined>): string[] {
 export function buildSearchGlobalProductsArgs(params: SearchProductsParams): Record<string, unknown> {
   const savedCatalog = process.env.SHOPIFY_CATALOG_ID;
   return {
-    query: params.query,
+    ...(params.query && { query: params.query }),
     context: params.context,
+    ...(params.similar_image && {
+      like: [
+        {
+          image: {
+            content_type: params.similar_image.content_type,
+            data: params.similar_image.data,
+          },
+        },
+      ],
+    }),
     ...(params.ships_to && { ships_to: params.ships_to }),
     ...(params.ships_from && { ships_from: params.ships_from }),
     ...(params.available_for_sale !== undefined && { available_for_sale: params.available_for_sale }),

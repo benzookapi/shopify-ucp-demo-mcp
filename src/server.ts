@@ -258,7 +258,8 @@ export function createMcpServer(): McpServer {
       'Trigger keywords (English/Japanese): "buy", "shop", "looking for", "find me", "browse", "compare prices", "in stock", "買う", "買いたい", "ショッピング", "探している", "欲しい", "比較したい". Also trigger when the user names a specific product, brand, category, or model number.',
       'Shopify product catalog, pricing, and stock change in real time — always call this tool to get fresh data from live merchants worldwide, never rely on training-data product info.',
       '',
-      'Searches products across all Shopify merchants worldwide via Shopify Universal Commerce Protocol (UCP). Returns titles, prices, ratings, options (size/color), and checkout URLs.',
+      'Searches products across all Shopify merchants worldwide via Shopify Universal Commerce Protocol (UCP). Returns titles, prices, ratings, options (size/color), checkout URLs, and product images when available.',
+      'Supports text search and image similarity search. For image similarity, pass image_base64 plus image_content_type; still include buyer context and ships_to.',
       '',
       'LOCATION RULES (critical — follow before calling this tool):',
       '1. Extract ships_to from the buyer\'s destination (e.g. "Tokyo", "Japan", "日本" → "JP"; "New York", "US" → "US").',
@@ -273,10 +274,16 @@ export function createMcpServer(): McpServer {
       'Each result carries an internal product_id in an HTML comment — do NOT show it to the buyer or ask them to quote it. When asking the buyer to pick a product, refer to it by its title only (e.g. "Would you like the Levi\'s 501 or the Wrangler Cowboy Cut?"). Look up the matching product_id yourself when you call get_product_details.',
     ].join('\n'),
     {
-      query: z.string().describe('Search query, e.g. "American jeans" or "Japanese skincare"'),
+      query: z.string().optional().describe('Search query, e.g. "American jeans" or "Japanese skincare". Optional when image_base64 is provided for visual similarity search.'),
       context: z.string().describe(
         'Detailed buyer context — ALWAYS include: (1) buyer location, (2) product origin if mentioned, (3) style/quality preferences, (4) brand expectations. ' +
         'Example: "buyer in Tokyo, Japan looking for authentic American-made premium denim jeans, prefers well-known US brands like Levi\'s or Wrangler, ships from US to JP"'
+      ),
+      image_base64: z.string().optional().describe(
+        'Base64-encoded image data for visual similarity search. Pass raw base64 only, without a data: URL prefix.'
+      ),
+      image_content_type: z.string().optional().describe(
+        'MIME type for image_base64, e.g. "image/jpeg", "image/png", or "image/webp". Required when image_base64 is provided.'
       ),
       ships_to: z.string().describe('2-letter ISO country code for the buyer\'s location / shipping destination (REQUIRED). e.g. "JP", "US", "GB"'),
       ships_from: z.string().optional().describe(
@@ -288,15 +295,31 @@ export function createMcpServer(): McpServer {
       price_max: z.number().optional().describe('Maximum price'),
       limit: z.number().optional().describe('Number of results (default: 5, max: 20)'),
     },
-    async ({ query, context, ships_to, ships_from, available_for_sale, price_min, price_max, limit }) => {
+    async ({ query, context, image_base64, image_content_type, ships_to, ships_from, available_for_sale, price_min, price_max, limit }) => {
+      if (!query && !image_base64) {
+        throw new Error('search_products requires either query or image_base64');
+      }
+      if (image_base64 && !image_content_type) {
+        throw new Error('image_content_type is required when image_base64 is provided');
+      }
+      if (image_content_type && !image_base64) {
+        throw new Error('image_base64 is required when image_content_type is provided');
+      }
+
       // Enrich context with location info
       let enrichedContext = context;
       if (ships_to && !context.includes(ships_to)) enrichedContext += ` [ships_to: ${ships_to}]`;
       if (ships_from && !context.includes(ships_from)) enrichedContext += ` [ships_from: ${ships_from}]`;
 
       const result = await searchGlobalProducts({
-        query,
+        ...(query && { query }),
         context: enrichedContext,
+        ...(image_base64 && image_content_type && {
+          similar_image: {
+            content_type: image_content_type,
+            data: image_base64,
+          },
+        }),
         ships_to,
         ...(ships_from && { ships_from }),
         available_for_sale: available_for_sale !== false, // default true
