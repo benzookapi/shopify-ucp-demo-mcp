@@ -367,25 +367,109 @@ function toUcpFulfillment(info: FulfillmentInfo): unknown {
 export async function createCheckout(
   shopDomain: string,
   params: {
-    currency: string;
-    line_items: LineItem[];
+    currency?: string;
+    line_items?: LineItem[];
+    cart_id?: string;
     buyer?: BuyerInfo;
     fulfillment?: FulfillmentInfo;
   }
 ) {
   const signals = buildSignals();
+  if (!params.cart_id && (!params.line_items || params.line_items.length === 0)) {
+    throw new Error('createCheckout requires either cart_id or line_items');
+  }
   const args: Record<string, unknown> = {
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
-    checkout: {
-      currency: params.currency,
+    ...(params.cart_id && { cart_id: params.cart_id }),
+    ...(!params.cart_id && {
+      checkout: {
+        ...(params.currency && { currency: params.currency }),
+        ...(params.line_items && { line_items: toUcpLineItems(params.line_items) }),
+        ...(params.buyer && { buyer: params.buyer }),
+        ...(params.fulfillment && { fulfillment: toUcpFulfillment(params.fulfillment) }),
+        ...(signals && { signals }),
+      },
+    }),
+  };
+
+  return callCheckoutMcp(shopDomain, 'create_checkout', args);
+}
+
+export interface CartContext {
+  address_country?: string;
+  currency?: string;
+  language?: string;
+}
+
+export async function createCart(
+  shopDomain: string,
+  params: {
+    currency?: string;
+    line_items: LineItem[];
+    context?: CartContext;
+  }
+) {
+  const signals = buildSignals();
+  const args: Record<string, unknown> = {
+    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+    cart: {
+      ...(params.currency && { currency: params.currency }),
       line_items: toUcpLineItems(params.line_items),
-      ...(params.buyer && { buyer: params.buyer }),
-      ...(params.fulfillment && { fulfillment: toUcpFulfillment(params.fulfillment) }),
+      ...(params.context && { context: params.context }),
       ...(signals && { signals }),
     },
   };
 
-  return callCheckoutMcp(shopDomain, 'create_checkout', args);
+  return callCheckoutMcp(shopDomain, 'create_cart', args);
+}
+
+export async function getCart(shopDomain: string, cartId: string) {
+  const args: Record<string, unknown> = {
+    id: cartId,
+    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+  };
+
+  return callCheckoutMcp(shopDomain, 'get_cart', args);
+}
+
+export async function updateCart(
+  shopDomain: string,
+  cartId: string,
+  params: {
+    currency?: string;
+    line_items: LineItem[];
+    context?: CartContext;
+  }
+) {
+  const signals = buildSignals();
+  const args: Record<string, unknown> = {
+    id: cartId,
+    meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
+    cart: {
+      ...(params.currency && { currency: params.currency }),
+      line_items: toUcpLineItems(params.line_items),
+      ...(params.context && { context: params.context }),
+      ...(signals && { signals }),
+    },
+  };
+
+  return callCheckoutMcp(shopDomain, 'update_cart', args);
+}
+
+export async function cancelCart(
+  shopDomain: string,
+  cartId: string,
+  idempotencyKey: string,
+) {
+  const args: Record<string, unknown> = {
+    id: cartId,
+    meta: {
+      'ucp-agent': { profile: UCP_AGENT_PROFILE },
+      'idempotency-key': idempotencyKey,
+    },
+  };
+
+  return callCheckoutMcp(shopDomain, 'cancel_cart', args);
 }
 
 // UCP update_checkout uses PUT semantics: the request body fully replaces

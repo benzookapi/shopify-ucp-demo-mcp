@@ -1,7 +1,6 @@
 const TOKEN_ENDPOINT = 'https://api.shopify.com/auth/access_token';
-// Shopify documents a 60-minute token lifetime, but the /auth/access_token
-// response does not include an `expires_in` field — verified 2026-05-19.
-// Hardcode the documented TTL and refresh 5 minutes early to avoid races.
+// Use the token lifetime when Shopify returns it, and fall back to the
+// documented 60-minute lifetime for older responses that omit expires_in.
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
@@ -37,10 +36,11 @@ async function fetchToken(): Promise<string> {
   const data = (await response.json()) as {
     access_token: string;
     token_type: string;
+    expires_in?: number;
   };
 
   cachedToken = data.access_token;
-  tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
+  tokenExpiresAt = Date.now() + (typeof data.expires_in === 'number' ? data.expires_in * 1000 : TOKEN_TTL_MS);
   return cachedToken;
 }
 

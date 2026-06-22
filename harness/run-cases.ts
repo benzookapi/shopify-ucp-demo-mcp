@@ -133,7 +133,11 @@ async function loadCases(options: CliOptions): Promise<Array<{ path: string; tes
 
 function firstProductId(searchResult: unknown): string | undefined {
   const raw = searchResult as Record<string, unknown> | null;
-  const offers = (Array.isArray(raw?.offers) ? raw.offers : []) as Record<string, unknown>[];
+  const offers = (Array.isArray(raw?.products)
+    ? raw.products
+    : Array.isArray(raw?.offers)
+    ? raw.offers
+    : []) as Record<string, unknown>[];
   const rawId = offers.find((offer) => typeof offer.id === 'string')?.id;
   return typeof rawId === 'string' ? extractBase62(rawId) : undefined;
 }

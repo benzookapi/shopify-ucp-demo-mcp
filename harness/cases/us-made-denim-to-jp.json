@@ -7,7 +7,7 @@
     "ships_to": "JP",
     "ships_from": "US",
     "available_for_sale": true,
-    "max_price": 250,
+    "max_price": 25000,
     "limit": 5
   },
   "expectations": {

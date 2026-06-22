@@ -1,8 +1,18 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { searchGlobalProducts, getGlobalProductDetails, extractBase62 } from './catalog.js';
 import {
+  searchGlobalProducts,
+  getGlobalProductDetails,
+  lookupCatalog,
+  extractBase62,
+} from './catalog.js';
+import {
+  createCart,
+  getCart,
+  updateCart,
+  cancelCart,
   createCheckout,
+  getCheckout,
   updateCheckout,
   completeCheckout,
   cancelCheckout,
@@ -53,6 +63,50 @@ function firstImageUrl(...values: unknown[]): string | undefined {
     if (url) return url;
   }
   return undefined;
+}
+
+async function imageUrlToBase64(url: string): Promise<{ content_type: string; data: string }> {
+  const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10000) });
+  if (!response.ok) {
+    throw new Error(`Image fetch failed (${response.status}) for ${url}`);
+  }
+  const contentType = response.headers.get('content-type')?.split(';')[0] ?? 'image/jpeg';
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`image_url must return an image content type, got ${contentType}`);
+  }
+  const buffer = Buffer.from(await response.arrayBuffer());
+  return { content_type: contentType, data: buffer.toString('base64') };
+}
+
+function priceString(price: unknown): string | undefined {
+  if (!price || typeof price !== 'object') return undefined;
+  const record = price as Record<string, unknown>;
+  const amount = record.amount;
+  const currency = getCurrency(record);
+  if (amount === undefined && !currency) return undefined;
+  return `${amount ?? ''} ${currency}`.trim();
+}
+
+function descriptionText(description: unknown, max = 120): string {
+  const text = typeof description === 'string'
+    ? description
+    : description && typeof description === 'object'
+    ? ((description as Record<string, unknown>).plain ?? (description as Record<string, unknown>).html)
+    : undefined;
+  if (typeof text !== 'string') return '';
+  return text.slice(0, max) + (text.length > max ? '...' : '');
+}
+
+function productArrayFromCatalogResult(raw: Record<string, unknown>): Record<string, unknown>[] {
+  if (Array.isArray(raw.products)) return raw.products as Record<string, unknown>[];
+  if (Array.isArray(raw.offers)) return raw.offers as Record<string, unknown>[];
+  return [];
+}
+
+function variantsOrProducts(product: Record<string, unknown>): Record<string, unknown>[] {
+  const products = (product.products as Record<string, unknown>[] | undefined) ?? [];
+  const variants = (product.variants as Record<string, unknown>[] | undefined) ?? [];
+  return products.length > 0 ? products : variants;
 }
 
 // Decorate the buyer-facing continue_url before handing it to the AI:
@@ -124,7 +178,7 @@ function formatCheckoutResponse(result: unknown): string {
         }
       }
       lines.push('');
-      lines.push('After the buyer completes the merchant-hosted step, the checkout transitions to `ready_for_complete` and you can call `complete_checkout`.');
+      lines.push('After the buyer completes the merchant-hosted step, call `get_checkout` if you need to inspect state. Some flows finish in the browser; only call `complete_checkout` if the checkout later reports `ready_for_complete`.');
       break;
     case 'ready_for_complete':
       lines.push('');
@@ -160,75 +214,86 @@ function formatCheckoutResponse(result: unknown): string {
   return lines.join('\n');
 }
 
-// Response structure from Catalog MCP search_global_products:
-// result.offers[] = universal products
-//   .id, .title, .description, .images[].url
-//   .priceRange.min.{ amount, currencyCode }
-//   .options[].{ name, values[].{ value, availableForSale } }
-//   .url  — product page URL on Shopify discovery
-//   .products[] = per-shop offers (may be empty when no offers match ship filter)
-//     .checkoutUrl, .price.{ amount, currencyCode }
-//     .shop.{ name, onlineStoreUrl }
-//     .selectedProductVariant.{ id, options[].{ name, value } }
-//     .availableForSale
-// Fallback: .variants[] = per-shop variant offers (alternate schema used by some responses)
-//   .id, .displayName, .checkoutUrl, .variantUrl, .price.{ amount, currencyCode }, image/images
+function formatCartResponse(result: unknown): string {
+  const root = (result as Record<string, unknown> | null) ?? {};
+  const cart = ((root.cart as Record<string, unknown> | undefined) ?? root) as Record<string, unknown>;
+  const id = cart.id as string | undefined;
+  const status = cart.status as string | undefined;
+  const currency = cart.currency as string | undefined;
+  const continueUrl = cart.continue_url as string | undefined;
+  const totals = (cart.totals as Array<Record<string, unknown>> | undefined) ?? [];
+  const lineItems = (cart.line_items as unknown[] | undefined) ?? [];
+  const totalEntry = totals.find((t) => t.type === 'total') ?? totals[totals.length - 1];
+  const totalText =
+    (totalEntry?.display_text as string | undefined) ??
+    (totalEntry?.amount != null ? `${totalEntry.amount}${currency ? ` ${currency}` : ''}` : undefined);
+
+  const lines: string[] = [];
+  lines.push(`**Cart: ${status ?? 'active'}**`);
+  if (id) lines.push(`Cart ID: \`${id}\``);
+  lines.push(`Line items: ${lineItems.length}`);
+  if (totalText) lines.push(`Total: ${totalText}`);
+  if (continueUrl) lines.push(`Continue URL: ${decorateContinueUrl(continueUrl)}`);
+  lines.push('');
+  lines.push('Use `create_checkout` with this `cart_id` when the buyer is ready to check out.');
+  lines.push('');
+  lines.push('<details><summary>Raw response</summary>');
+  lines.push('');
+  lines.push('```json');
+  lines.push(JSON.stringify(result, null, 2));
+  lines.push('```');
+  lines.push('');
+  lines.push('</details>');
+  return lines.join('\n');
+}
+
 function formatSearchProduct(p: Record<string, unknown>, index: number): string {
   const perShopOffers = (p.products as Record<string, unknown>[] | undefined) ?? [];
-  // Fallback: some Catalog MCP responses use variants[] instead of products[]
   const variants = (p.variants as Record<string, unknown>[] | undefined) ?? [];
 
   const firstOffer = perShopOffers[0] ?? variants[0] ?? {};
   const isVariantSchema = perShopOffers.length === 0 && variants.length > 0;
 
   const shop = isVariantSchema ? {} : ((firstOffer.shop as Record<string, unknown> | undefined) ?? {});
+  const seller = (firstOffer.seller as Record<string, unknown> | undefined) ?? {};
   const variantPrice = firstOffer.price as Record<string, unknown> | undefined;
-  const priceRange = p.priceRange as Record<string, Record<string, unknown>> | undefined;
+  const priceRange = (p.priceRange ?? p.price_range) as Record<string, Record<string, unknown>> | undefined;
 
-  const priceStr = variantPrice
-    ? `${variantPrice.amount} ${getCurrency(variantPrice)}`.trim()
-    : priceRange?.min
-    ? `${priceRange.min.amount} ${getCurrency(priceRange.min)}`.trim()
+  const priceStr = priceString(variantPrice) ?? (priceRange?.min ? priceString(priceRange.min) : undefined) ?? 'N/A';
+
+  const ratingRecord = (firstOffer.rating ?? p.rating) as { value?: number; count?: number } | undefined;
+  const ratingStr = ratingRecord?.value
+    ? `rating ${ratingRecord.value.toFixed(1)}${ratingRecord.count ? ` (${ratingRecord.count})` : ''}`
     : 'N/A';
-
-  // Rating: prefer per-shop offer rating, fall back to universal product rating
-  const offerRating = (firstOffer.rating ?? p.rating) as { value?: number; count?: number } | undefined;
-  const ratingStr = offerRating?.value
-    ? `⭐ ${offerRating.value.toFixed(1)}${offerRating.count ? ` (${offerRating.count})` : ''}`
-    : '';
+  const hasRating = ratingStr !== 'N/A';
 
   const selectedVariant = firstOffer.selectedProductVariant as Record<string, unknown> | undefined;
   const imageUrl = firstImageUrl(p, selectedVariant, firstOffer, ...variants, ...perShopOffers);
 
-  const desc = typeof p.description === 'string'
-    ? p.description.slice(0, 120) + (p.description.length > 120 ? '…' : '')
-    : '';
+  const desc = descriptionText(p.description);
 
-  const shopUrl = (shop.onlineStoreUrl ?? firstOffer.variantUrl) as string | undefined;
-  const checkoutUrl = firstOffer.checkoutUrl as string | undefined;
-  const shopName = (shop.name ?? (isVariantSchema && firstOffer.displayName ? 'View product' : undefined)) as string | undefined;
+  const shopUrl = (seller.url ?? shop.onlineStoreUrl ?? firstOffer.variantUrl ?? firstOffer.url) as string | undefined;
+  const checkoutUrl = (firstOffer.checkout_url ?? firstOffer.checkoutUrl) as string | undefined;
+  const shopName = (seller.name ?? seller.domain ?? shop.name ?? (isVariantSchema && firstOffer.displayName ? 'View product' : undefined)) as string | undefined;
 
-  // Product page URL (for when products[] is empty)
-  const productPageUrl = p.url as string | undefined;
+  const productPageUrl = (p.lookup_url ?? p.url ?? firstOffer.url) as string | undefined;
 
-  // Extract Base62 UPID for use with get_product_details
   const rawId = p.id as string | undefined;
   const base62 = rawId ? extractBase62(rawId) : 'N/A';
 
-  // Show available options (e.g. sizes, colors)
-  const options = (p.options as Array<{ name: string; values: Array<{ value: string; availableForSale?: boolean }> }> | undefined) ?? [];
+  const options = (p.options as Array<{ name: string; values: Array<{ value?: string; label?: string; availableForSale?: boolean; availability?: { available?: boolean } }> }> | undefined) ?? [];
   const optionLines = options.map((opt) => {
-    const vals = opt.values.map((v) => v.availableForSale === false ? `~~${v.value}~~` : v.value);
+    const vals = opt.values.map((v) => {
+      const label = v.label ?? v.value ?? '';
+      const available = v.availableForSale ?? v.availability?.available;
+      return available === false ? `~~${label}~~` : label;
+    });
     return `   ${opt.name}: ${vals.join(' / ')}`;
   });
 
-  // Render the image as a markdown thumbnail (![alt](url)) so clients that
-  // support inline image rendering (Claude Desktop, web UIs) display it.
-  // Place it on its own un-indented line so the list-item continuation rules
-  // don't swallow the image syntax.
   const titleForAlt = (p.title as string | undefined) ?? 'Product image';
   return [
-    `${index + 1}. **${p.title}** — ${priceStr}${ratingStr ? `  ${ratingStr}` : ''}`,
+    `${index + 1}. **${p.title}** — ${priceStr}${hasRating ? `  ${ratingStr}` : ''}`,
     imageUrl ? `\n![${titleForAlt}](${imageUrl})\n` : '',
     shopName ? `   Shop: ${shopName}${shopUrl ? ` (${shopUrl})` : ''}` : '',
     desc ? `   ${desc}` : '',
@@ -259,7 +324,7 @@ export function createMcpServer(): McpServer {
       'Shopify product catalog, pricing, and stock change in real time — always call this tool to get fresh data from live merchants worldwide, never rely on training-data product info.',
       '',
       'Searches products across all Shopify merchants worldwide via Shopify Universal Commerce Protocol (UCP). Returns titles, prices, ratings, options (size/color), checkout URLs, and product images when available.',
-      'Supports text search and image similarity search. For image similarity, pass image_base64 plus image_content_type; still include buyer context and ships_to.',
+      'Supports text search and image similarity search. For image similarity, pass image_base64 plus image_content_type, or pass image_url and this server will fetch and encode it; still include buyer context and ships_to.',
       '',
       'LOCATION RULES (critical — follow before calling this tool):',
       '1. Extract ships_to from the buyer\'s destination (e.g. "Tokyo", "Japan", "日本" → "JP"; "New York", "US" → "US").',
@@ -285,25 +350,31 @@ export function createMcpServer(): McpServer {
       image_content_type: z.string().optional().describe(
         'MIME type for image_base64, e.g. "image/jpeg", "image/png", or "image/webp". Required when image_base64 is provided.'
       ),
+      image_url: z.string().url().optional().describe(
+        'HTTP(S) image URL for visual similarity search. Use this when the client can provide an image URL or Markdown image URL but cannot pass base64. The server fetches it and forwards base64 to Shopify Catalog.'
+      ),
       ships_to: z.string().describe('2-letter ISO country code for the buyer\'s location / shipping destination (REQUIRED). e.g. "JP", "US", "GB"'),
       ships_from: z.string().optional().describe(
         'ISO country code for the product\'s shipping origin — use when the query mentions product origin. ' +
         'e.g. "American-made" / "米国製" → "US"; "Made in Italy" → "IT"; "Japanese products" / "日本製" → "JP"'
       ),
       available_for_sale: z.boolean().optional().describe('Only return in-stock purchasable products (default: true)'),
-      price_min: z.number().optional().describe('Minimum price'),
-      price_max: z.number().optional().describe('Maximum price'),
+      price_min: z.number().optional().describe('Minimum price in minor currency units, e.g. 5000 for $50.00 USD'),
+      price_max: z.number().optional().describe('Maximum price in minor currency units, e.g. 15000 for $150.00 USD'),
       limit: z.number().optional().describe('Number of results (default: 5, max: 20)'),
     },
-    async ({ query, context, image_base64, image_content_type, ships_to, ships_from, available_for_sale, price_min, price_max, limit }) => {
-      if (!query && !image_base64) {
-        throw new Error('search_products requires either query or image_base64');
+    async ({ query, context, image_base64, image_content_type, image_url, ships_to, ships_from, available_for_sale, price_min, price_max, limit }) => {
+      if (!query && !image_base64 && !image_url) {
+        throw new Error('search_products requires either query, image_base64, or image_url');
       }
       if (image_base64 && !image_content_type) {
         throw new Error('image_content_type is required when image_base64 is provided');
       }
-      if (image_content_type && !image_base64) {
+      if (image_content_type && !image_base64 && !image_url) {
         throw new Error('image_base64 is required when image_content_type is provided');
+      }
+      if (image_base64 && image_url) {
+        throw new Error('Pass either image_base64 or image_url, not both');
       }
 
       // Enrich context with location info
@@ -311,15 +382,16 @@ export function createMcpServer(): McpServer {
       if (ships_to && !context.includes(ships_to)) enrichedContext += ` [ships_to: ${ships_to}]`;
       if (ships_from && !context.includes(ships_from)) enrichedContext += ` [ships_from: ${ships_from}]`;
 
+      const image = image_base64 && image_content_type
+        ? { content_type: image_content_type, data: image_base64 }
+        : image_url
+        ? await imageUrlToBase64(image_url)
+        : undefined;
+
       const result = await searchGlobalProducts({
         ...(query && { query }),
         context: enrichedContext,
-        ...(image_base64 && image_content_type && {
-          similar_image: {
-            content_type: image_content_type,
-            data: image_base64,
-          },
-        }),
+        ...(image && { similar_image: image }),
         ships_to,
         ...(ships_from && { ships_from }),
         available_for_sale: available_for_sale !== false, // default true
@@ -329,7 +401,7 @@ export function createMcpServer(): McpServer {
       });
 
       const raw = result as Record<string, unknown>;
-      const offers = (Array.isArray(raw?.offers) ? raw.offers : []) as Record<string, unknown>[];
+      const offers = productArrayFromCatalogResult(raw);
 
       const lines = offers.map((p, i) => formatSearchProduct(p, i));
       const text = lines.length > 0
@@ -378,12 +450,7 @@ export function createMcpServer(): McpServer {
       const raw = result as Record<string, unknown>;
       const product = (raw?.product ?? raw) as Record<string, unknown>;
 
-      // Try products[] (standard MCP schema), then variants[] (actual response schema)
-      let perShopOffers = (product.products as Record<string, unknown>[] | undefined) ?? [];
-      const isVariantSchema = perShopOffers.length === 0 && Array.isArray(product.variants);
-      if (isVariantSchema) {
-        perShopOffers = (product.variants as Record<string, unknown>[]);
-      }
+      let perShopOffers = variantsOrProducts(product);
 
       // Fallback: if ships_to filtering returned 0 offers, retry without it
       let usedFallback = false;
@@ -396,38 +463,35 @@ export function createMcpServer(): McpServer {
         });
         const fallbackRaw = fallbackResult as Record<string, unknown>;
         const fallbackProduct = (fallbackRaw?.product ?? fallbackRaw) as Record<string, unknown>;
-        perShopOffers = (fallbackProduct.products as Record<string, unknown>[] | undefined) ?? [];
-        if (perShopOffers.length === 0 && Array.isArray(fallbackProduct.variants)) {
-          perShopOffers = fallbackProduct.variants as Record<string, unknown>[];
-        }
+        perShopOffers = variantsOrProducts(fallbackProduct);
         usedFallback = true;
       }
 
-      // Format a per-shop offer — handles both products[] schema and variants[] schema
       const formatOffer = (offer: Record<string, unknown>, i: number): string => {
-        // products[] schema: offer has .shop, .selectedProductVariant, .availableForSale
-        // variants[] schema: offer has .displayName, .variantUrl, .price directly
         const hasShop = Boolean(offer.shop);
         const shop = hasShop ? ((offer.shop as Record<string, unknown> | undefined) ?? {}) : {};
+        const seller = (offer.seller as Record<string, unknown> | undefined) ?? {};
         const price = offer.price as Record<string, unknown> | undefined;
         const variant = hasShop
           ? ((offer.selectedProductVariant as Record<string, unknown> | undefined) ?? {})
-          : offer; // in variants[] schema, the variant IS the offer
-        const variantOptions = (variant.options as Array<{ name: string; value: string }> | undefined) ?? [];
-        const priceStr = price ? `${price.amount} ${getCurrency(price)}` : 'N/A';
-        const displayName = (offer.displayName ?? shop.name) as string | undefined;
+          : offer;
+        const variantOptions = (variant.options as Array<{ name: string; value?: string; label?: string }> | undefined) ?? [];
+        const priceStr = priceString(price) ?? 'N/A';
+        const displayName = (offer.displayName ?? seller.name ?? seller.domain ?? shop.name) as string | undefined;
         const optStr = variantOptions.length > 0
-          ? variantOptions.map((o) => `${o.name}: ${o.value}`).join(', ')
+          ? variantOptions.map((o) => `${o.name}: ${o.label ?? o.value ?? ''}`).join(', ')
           : typeof offer.displayName === 'string' ? offer.displayName : '';
-        const availStr = offer.availableForSale === false ? ' ⚠️ sold out' : '';
-        const storeUrl = (shop.onlineStoreUrl ?? offer.variantUrl) as string | undefined;
+        const available = (offer.availability as Record<string, unknown> | undefined)?.available ?? offer.availableForSale;
+        const availStr = available === false ? ' (sold out)' : '';
+        const storeUrl = (seller.url ?? shop.onlineStoreUrl ?? offer.variantUrl ?? offer.url) as string | undefined;
         const variantId = (variant.id ?? offer.id) as string | undefined;
+        const checkoutUrl = (offer.checkout_url ?? offer.checkoutUrl) as string | undefined;
         return [
           `${i + 1}. **${displayName ?? 'Offer'}** — ${priceStr}${optStr ? ` (${optStr})` : ''}${availStr}`,
-          offer.checkoutUrl && offer.availableForSale !== false
-            ? `   **Checkout: ${offer.checkoutUrl}**`
-            : offer.checkoutUrl
-            ? `   Checkout (out of stock): ${offer.checkoutUrl}`
+          checkoutUrl && available !== false
+            ? `   **Checkout: ${checkoutUrl}**`
+            : checkoutUrl
+            ? `   Checkout (out of stock): ${checkoutUrl}`
             : '',
           storeUrl ? `   Store: ${storeUrl}` : '',
           variantId ? `   Variant ID: ${variantId}` : '',
@@ -437,9 +501,13 @@ export function createMcpServer(): McpServer {
       const lines = perShopOffers.map((offer, i) => formatOffer(offer, i));
 
       // Product-level options (all available variants)
-      const productOptions = (product.options as Array<{ name: string; values: Array<{ value: string; availableForSale?: boolean }> }> | undefined) ?? [];
+      const productOptions = (product.options as Array<{ name: string; values: Array<{ value?: string; label?: string; availableForSale?: boolean; availability?: { available?: boolean } }> }> | undefined) ?? [];
       const optionSummary = productOptions.map((opt) => {
-        const vals = opt.values.map((v) => v.availableForSale === false ? `~~${v.value}~~` : v.value);
+        const vals = opt.values.map((v) => {
+          const label = v.label ?? v.value ?? '';
+          const available = v.availableForSale ?? v.availability?.available;
+          return available === false ? `~~${label}~~` : label;
+        });
         return `**${opt.name}**: ${vals.join(' / ')}`;
       }).join('\n');
 
@@ -453,7 +521,7 @@ export function createMcpServer(): McpServer {
       // Get product title — may be missing in some API responses; fall back to description snippet
       const productTitle = (product.title && product.title !== 'None')
         ? String(product.title)
-        : (typeof product.description === 'string' ? product.description.slice(0, 60) : upid);
+        : (descriptionText(product.description, 60) || upid);
 
       const shippingNote = usedFallback
         ? `\n⚠️ No offers found shipping to ${ships_to}. Showing all available offers globally:`
@@ -466,7 +534,7 @@ export function createMcpServer(): McpServer {
         // Render as markdown thumbnail so clients that support image rendering
         // display it inline; falls back to a plain URL on text-only clients.
         imageUrl ? `\n![${productTitle}](${imageUrl})` : '',
-        typeof product.description === 'string' ? product.description.slice(0, 300) : '',
+        descriptionText(product.description, 300),
         optionSummary ? `\n${optionSummary}` : '',
         topFeatures.length > 0 ? `\nFeatures:\n${topFeatures.map((f) => `• ${f}`).join('\n')}` : '',
         shippingNote,
@@ -489,6 +557,139 @@ export function createMcpServer(): McpServer {
   );
 
   // ----------------------------------------------------------------
+  // Tool: lookup_products
+  // ----------------------------------------------------------------
+  server.tool(
+    'lookup_products',
+    [
+      'Lookup fresh Catalog data for known Shopify Catalog product or variant IDs.',
+      'Use this when you already have product IDs from a previous search, saved reference, shared link, or cart flow and need current product / variant data without running a new text search.',
+      'This wraps Shopify Catalog MCP `lookup_catalog` while preserving this demo server\'s friendly tool naming.',
+    ].join('\n'),
+    {
+      ids: z.array(z.string()).min(1).max(50).describe('Catalog product or variant IDs. Global Catalog resolves up to 50 identifiers per request.'),
+      context: z.string().optional().describe('Buyer context, e.g. location and intent.'),
+      ships_to: z.string().optional().describe('2-letter ISO destination country code, e.g. "US" or "JP".'),
+    },
+    async ({ ids, context, ships_to }) => {
+      const result = await lookupCatalog({
+        ids,
+        ...(context && { context }),
+        ...(ships_to && { ships_to }),
+      });
+      const raw = result as Record<string, unknown>;
+      const products = productArrayFromCatalogResult(raw);
+      const lines = products.map((p, i) => formatSearchProduct(p, i));
+      const text = lines.length > 0
+        ? `Found ${lines.length} product(s):\n\n${lines.join('\n\n')}`
+        : `No products resolved.\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``;
+      return { content: [{ type: 'text', text }] };
+    }
+  );
+
+  // ----------------------------------------------------------------
+  // Tool: create_cart
+  // ----------------------------------------------------------------
+  server.tool(
+    'create_cart',
+    [
+      'Create a merchant cart for basket-building before checkout.',
+      'Use this when the buyer wants to add items, compare totals, or keep shopping before paying. Cart line_items are full UCP item IDs from get_product_details.',
+      'When the buyer is ready, call create_checkout with the returned cart_id.',
+    ].join('\n'),
+    {
+      shop_domain: z.string().describe('Shopify store domain, e.g. "example.myshopify.com"'),
+      currency: z.string().optional().describe('Merchant currency from product details, if known.'),
+      line_items: z.array(z.object({
+        variant_id: z.string().describe('Product variant GID'),
+        quantity: z.number().int().min(1),
+      })).min(1).describe('Cart items to add'),
+      address_country: z.string().optional().describe('2-letter ISO country code for localization, e.g. "US" or "JP".'),
+      language: z.string().optional().describe('Optional BCP 47 language tag, e.g. "en-US" or "ja-JP".'),
+    },
+    async ({ shop_domain, currency, line_items, address_country, language }) => {
+      const result = await createCart(shop_domain, {
+        ...(currency && { currency }),
+        line_items,
+        ...((address_country || currency || language) && {
+          context: {
+            ...(address_country && { address_country }),
+            ...(currency && { currency }),
+            ...(language && { language }),
+          },
+        }),
+      });
+      return { content: [{ type: 'text', text: formatCartResponse(result) }] };
+    }
+  );
+
+  // ----------------------------------------------------------------
+  // Tool: get_cart
+  // ----------------------------------------------------------------
+  server.tool(
+    'get_cart',
+    'Get a merchant cart by ID. Use this before update_cart when you need to preserve the full line_items list.',
+    {
+      shop_domain: z.string().describe('Shopify store domain'),
+      cart_id: z.string().describe('Cart ID returned by create_cart'),
+    },
+    async ({ shop_domain, cart_id }) => {
+      const result = await getCart(shop_domain, cart_id);
+      return { content: [{ type: 'text', text: formatCartResponse(result) }] };
+    }
+  );
+
+  // ----------------------------------------------------------------
+  // Tool: update_cart
+  // ----------------------------------------------------------------
+  server.tool(
+    'update_cart',
+    'Update a merchant cart. IMPORTANT: UCP cart update is full-replace; always include every line_item that should remain in the cart, not only the changed item.',
+    {
+      shop_domain: z.string().describe('Shopify store domain'),
+      cart_id: z.string().describe('Cart ID returned by create_cart'),
+      currency: z.string().optional().describe('Merchant currency, if known.'),
+      line_items: z.array(z.object({
+        variant_id: z.string().describe('Product variant GID'),
+        quantity: z.number().int().min(0),
+      })).describe('Complete replacement line_items list. Use quantity 0 only if the merchant schema accepts it; otherwise omit removed items.'),
+      address_country: z.string().optional().describe('2-letter ISO country code for localization.'),
+      language: z.string().optional().describe('Optional BCP 47 language tag.'),
+    },
+    async ({ shop_domain, cart_id, currency, line_items, address_country, language }) => {
+      const result = await updateCart(shop_domain, cart_id, {
+        ...(currency && { currency }),
+        line_items,
+        ...((address_country || currency || language) && {
+          context: {
+            ...(address_country && { address_country }),
+            ...(currency && { currency }),
+            ...(language && { language }),
+          },
+        }),
+      });
+      return { content: [{ type: 'text', text: formatCartResponse(result) }] };
+    }
+  );
+
+  // ----------------------------------------------------------------
+  // Tool: cancel_cart
+  // ----------------------------------------------------------------
+  server.tool(
+    'cancel_cart',
+    'Cancel an active merchant cart. Requires a unique idempotency_key (UUID) so retries are safe.',
+    {
+      shop_domain: z.string().describe('Shopify store domain'),
+      cart_id: z.string().describe('Cart ID returned by create_cart'),
+      idempotency_key: z.string().describe('Unique UUID for this cancellation attempt'),
+    },
+    async ({ shop_domain, cart_id, idempotency_key }) => {
+      const result = await cancelCart(shop_domain, cart_id, idempotency_key);
+      return { content: [{ type: 'text', text: formatCartResponse(result) }] };
+    }
+  );
+
+  // ----------------------------------------------------------------
   // Tool: create_checkout
   // ----------------------------------------------------------------
   server.tool(
@@ -498,17 +699,19 @@ export function createMcpServer(): McpServer {
       'Trigger phrases: "buy this", "purchase", "order it", "check out", "I\'ll take it", "add to cart and pay", "買う", "購入", "注文", "これにします", "決済して", "チェックアウト".',
       '',
       'Creates a checkout session for a product on a Shopify merchant store. Returns checkout status and a continue_url for the buyer to complete payment.',
+      'If a cart was created first, prefer passing cart_id to convert the cart into a checkout. Use direct line_items only for buy-now flows.',
       'CURRENCY RULE: Pass the currency shown for the selected offer in the preceding get_product_details output (the second token of the price string, e.g. "59.00 USD" → "USD"). Do NOT infer from the buyer\'s country — a US-based store may only price/accept USD even when the buyer is in Japan; passing JPY will fail.',
       'IMPORTANT: The shop may not have enabled UCP Checkout MCP. If this tool responds with a message that says "has not enabled UCP Checkout MCP", show the buyer the checkoutUrl from get_product_details results instead — do not retry create_checkout for that shop.',
       'Extract shop_domain from the checkoutUrl hostname (e.g. "store.myshopify.com") or onlineStoreUrl.',
     ].join('\n'),
     {
       shop_domain: z.string().describe('Shopify store domain, e.g. "example.myshopify.com" — extract from checkoutUrl or onlineStoreUrl'),
-      currency: z.string().describe('ISO 4217 currency code from the selected offer in get_product_details — the merchant\'s pricing currency, NOT the buyer\'s local currency. e.g. if the offer is "59.00 USD", pass "USD" (even for a JP buyer).'),
+      cart_id: z.string().optional().describe('Cart ID returned by create_cart. Prefer this when converting an existing cart to checkout.'),
+      currency: z.string().optional().describe('ISO 4217 currency code from the selected offer in get_product_details. Required for direct line_items checkout; not needed when cart_id is provided.'),
       line_items: z.array(z.object({
         variant_id: z.string().describe('Product variant GID, e.g. "gid://shopify/ProductVariant/12345"'),
         quantity: z.number().int().min(1),
-      })).describe('Items to purchase'),
+      })).optional().describe('Items to purchase for direct buy-now checkout. Omit when cart_id is provided.'),
       buyer_email: z.string().optional().describe('Buyer email for order confirmation'),
       buyer_first_name: z.string().optional(),
       buyer_last_name: z.string().optional(),
@@ -520,6 +723,7 @@ export function createMcpServer(): McpServer {
     },
     async ({
       shop_domain,
+      cart_id,
       currency,
       line_items,
       buyer_email,
@@ -531,6 +735,12 @@ export function createMcpServer(): McpServer {
       shipping_postal_code,
       shipping_country,
     }) => {
+      if (!cart_id && (!line_items || line_items.length === 0)) {
+        throw new Error('create_checkout requires either cart_id or line_items');
+      }
+      if (!cart_id && !currency) {
+        throw new Error('currency is required when creating checkout directly from line_items');
+      }
       const buyer =
         buyer_email || buyer_first_name || buyer_last_name
           ? {
@@ -555,8 +765,9 @@ export function createMcpServer(): McpServer {
 
       try {
         const result = await createCheckout(shop_domain, {
-          currency,
-          line_items,
+          ...(cart_id && { cart_id }),
+          ...(currency && { currency }),
+          ...(line_items && { line_items }),
           ...(buyer && { buyer }),
           ...(fulfillment && { fulfillment }),
         });
@@ -578,6 +789,22 @@ export function createMcpServer(): McpServer {
         }
         throw e;
       }
+    }
+  );
+
+  // ----------------------------------------------------------------
+  // Tool: get_checkout
+  // ----------------------------------------------------------------
+  server.tool(
+    'get_checkout',
+    'Get the latest state for an existing checkout. Use this after buyer handoff or before deciding whether complete_checkout is allowed.',
+    {
+      shop_domain: z.string().describe('Shopify store domain'),
+      checkout_id: z.string().describe('Checkout session ID returned by create_checkout'),
+    },
+    async ({ shop_domain, checkout_id }) => {
+      const result = await getCheckout(shop_domain, checkout_id);
+      return { content: [{ type: 'text', text: formatCheckoutResponse(result) }] };
     }
   );
 

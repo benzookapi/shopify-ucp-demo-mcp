@@ -1,7 +1,7 @@
 import { getBearerToken } from './auth.js';
 import { UCP_AGENT_PROFILE } from './ucp-config.js';
 
-const CATALOG_MCP_URL = 'https://discover.shopifyapps.com/global/mcp';
+const CATALOG_MCP_URL = 'https://catalog.shopify.com/api/ucp/mcp';
 
 let requestId = 0;
 
@@ -59,10 +59,6 @@ async function parseResponse(response: Response): Promise<unknown> {
 async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   const token = await getBearerToken();
 
-  // Inject meta.ucp-agent.profile required by the UCP Catalog MCP spec.
-  // The current discover.shopifyapps.com endpoint accepts the flat-args shape
-  // this sample uses; passing meta alongside is forward-compatible with the
-  // canonical {your_catalog_url} endpoint, which requires it.
   const argsWithMeta: Record<string, unknown> = {
     meta: { 'ucp-agent': { profile: UCP_AGENT_PROFILE } },
     ...args,
@@ -94,7 +90,10 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
   }
 
   const json = (await parseResponse(response)) as {
-    result?: { content?: Array<{ type: string; text: string }> };
+    result?: {
+      content?: Array<{ type: string; text: string }>;
+      structuredContent?: unknown;
+    };
     error?: { code: number; message: string; data?: unknown };
   };
 
@@ -105,16 +104,21 @@ async function callCatalogMcp(toolName: string, args: Record<string, unknown>) {
     );
   }
 
-  const textContent = json.result?.content?.find((c) => c.type === 'text');
-  if (!textContent) {
-    throw new Error(`No text content in Catalog MCP response: ${JSON.stringify(json)}`);
+  const parsed = json.result?.structuredContent ?? (() => {
+    const textContent = json.result?.content?.find((c) => c.type === 'text');
+    if (!textContent) return undefined;
+    return JSON.parse(textContent.text);
+  })();
+
+  if (!parsed) {
+    throw new Error(`No content in Catalog MCP response: ${JSON.stringify(json)}`);
   }
 
-  const parsed = JSON.parse(textContent.text);
-  // Debug: log response structure
-  const debugInfo = toolName === 'search_global_products'
-    ? `offers.length=${Array.isArray(parsed?.offers) ? parsed.offers.length : 'N/A'}`
-    : `product.products.length=${Array.isArray(parsed?.product?.products) ? parsed.product.products.length : 'N/A'}`;
+  const raw = parsed as Record<string, unknown>;
+  const product = ((raw.product as Record<string, unknown> | undefined) ?? raw) as Record<string, unknown>;
+  const debugInfo = toolName === 'search_catalog' || toolName === 'lookup_catalog'
+    ? `products.length=${Array.isArray(raw?.products) ? raw.products.length : 'N/A'} offers.length=${Array.isArray(raw?.offers) ? raw.offers.length : 'N/A'}`
+    : `product.variants.length=${Array.isArray(product?.variants) ? product.variants.length : 'N/A'} product.products.length=${Array.isArray(product?.products) ? product.products.length : 'N/A'}`;
   console.error(`[catalog] ${toolName} response: ${debugInfo}`);
 
   return parsed;
@@ -129,6 +133,8 @@ export interface SearchProductsParams {
   min_price?: number;
   max_price?: number;
   limit?: number;
+  cursor?: string;
+  saved_catalog_slug?: string;
   similar_image?: {
     content_type: string;
     data: string;
@@ -144,7 +150,7 @@ export interface CatalogSearchSummary {
   currencies: string[];
   merchantHosts: string[];
   productTitles: string[];
-  responseShape: 'offers' | 'unknown';
+  responseShape: 'products' | 'offers' | 'unknown';
 }
 
 export interface CatalogProductDetailsSummary {
@@ -177,11 +183,32 @@ function uniqueSorted(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((v): v is string => Boolean(v)))].sort();
 }
 
+function gidForCatalogProduct(id: string): string {
+  if (id.startsWith('gid://')) return id;
+  return `gid://shopify/p/${extractBase62(id)}`;
+}
+
 export function buildSearchGlobalProductsArgs(params: SearchProductsParams): Record<string, unknown> {
-  const savedCatalog = process.env.SHOPIFY_CATALOG_ID;
-  return {
+  const savedCatalog = params.saved_catalog_slug ?? process.env.SHOPIFY_CATALOG_ID;
+  const filters: Record<string, unknown> = {};
+  if (params.ships_to) filters.ships_to = { country: params.ships_to };
+  if (params.ships_from) filters.ships_from = [{ country: params.ships_from }];
+  if (params.available_for_sale !== undefined) filters.available = params.available_for_sale;
+  if (params.min_price !== undefined || params.max_price !== undefined) {
+    filters.price = {
+      ...(params.min_price !== undefined && { min: params.min_price }),
+      ...(params.max_price !== undefined && { max: params.max_price }),
+    };
+  }
+
+  const catalog: Record<string, unknown> = {
     ...(params.query && { query: params.query }),
-    context: params.context,
+    ...(params.context && {
+      context: {
+        intent: params.context,
+        ...(params.ships_to && { address_country: params.ships_to }),
+      },
+    }),
     ...(params.similar_image && {
       like: [
         {
@@ -192,19 +219,24 @@ export function buildSearchGlobalProductsArgs(params: SearchProductsParams): Rec
         },
       ],
     }),
-    ...(params.ships_to && { ships_to: params.ships_to }),
-    ...(params.ships_from && { ships_from: params.ships_from }),
-    ...(params.available_for_sale !== undefined && { available_for_sale: params.available_for_sale }),
-    ...(params.min_price !== undefined && { min_price: params.min_price }),
-    ...(params.max_price !== undefined && { max_price: params.max_price }),
-    ...(params.limit !== undefined && { limit: params.limit }),
-    ...(savedCatalog && { saved_catalog: savedCatalog }),
+    ...(Object.keys(filters).length > 0 && { filters }),
+    ...((params.limit !== undefined || params.cursor) && {
+      pagination: {
+        ...(params.limit !== undefined && { limit: params.limit }),
+        ...(params.cursor && { cursor: params.cursor }),
+      },
+    }),
+    ...(savedCatalog && { saved_catalog_slug: savedCatalog }),
+  };
+
+  return {
+    catalog,
   };
 }
 
 export function summarizeCatalogSearchResult(result: unknown): CatalogSearchSummary {
   const raw = result as Record<string, unknown> | null;
-  const offers = (Array.isArray(raw?.offers) ? raw.offers : []) as Record<string, unknown>[];
+  const offers = (Array.isArray(raw?.products) ? raw.products : Array.isArray(raw?.offers) ? raw.offers : []) as Record<string, unknown>[];
   const currencies: Array<string | undefined> = [];
   const merchantHosts: Array<string | undefined> = [];
   let offersWithProducts = 0;
@@ -217,24 +249,28 @@ export function summarizeCatalogSearchResult(result: unknown): CatalogSearchSumm
     const variants = (offer.variants as Record<string, unknown>[] | undefined) ?? [];
     if (products.length > 0) offersWithProducts += 1;
     if (variants.length > 0) offersWithVariants += 1;
-    if (typeof offer.url === 'string') offersWithProductPageUrl += 1;
+    if (typeof offer.url === 'string' || typeof offer.lookup_url === 'string') offersWithProductPageUrl += 1;
 
     const childOffers = products.length > 0 ? products : variants;
-    if (childOffers.some((child) => typeof child.checkoutUrl === 'string')) {
+    if (childOffers.some((child) => typeof child.checkoutUrl === 'string' || typeof child.checkout_url === 'string')) {
       offersWithCheckoutUrl += 1;
     }
 
     for (const child of childOffers) {
       currencies.push(currencyFromPrice(child.price));
       const shop = child.shop as Record<string, unknown> | undefined;
+      const seller = child.seller as Record<string, unknown> | undefined;
       merchantHosts.push(
+        (typeof seller?.domain === 'string' ? seller.domain : undefined) ??
+          hostFromUrl(seller?.url) ??
         hostFromUrl(shop?.onlineStoreUrl) ??
           hostFromUrl(child.variantUrl) ??
-          hostFromUrl(child.checkoutUrl)
+          hostFromUrl(child.checkoutUrl) ??
+          hostFromUrl(child.checkout_url)
       );
     }
 
-    const priceRange = offer.priceRange as Record<string, Record<string, unknown>> | undefined;
+    const priceRange = (offer.priceRange ?? offer.price_range) as Record<string, Record<string, unknown>> | undefined;
     currencies.push(currencyFromPrice(priceRange?.min));
   }
 
@@ -249,7 +285,7 @@ export function summarizeCatalogSearchResult(result: unknown): CatalogSearchSumm
     productTitles: offers
       .map((offer) => offer.title)
       .filter((title): title is string => typeof title === 'string'),
-    responseShape: Array.isArray(raw?.offers) ? 'offers' : 'unknown',
+    responseShape: Array.isArray(raw?.products) ? 'products' : Array.isArray(raw?.offers) ? 'offers' : 'unknown',
   };
 }
 
@@ -265,10 +301,14 @@ export function summarizeProductDetailsResult(result: unknown): CatalogProductDe
   for (const offer of offers) {
     currencies.push(currencyFromPrice(offer.price));
     const shop = offer.shop as Record<string, unknown> | undefined;
+    const seller = offer.seller as Record<string, unknown> | undefined;
     merchantHosts.push(
-      hostFromUrl(shop?.onlineStoreUrl) ??
+      (typeof seller?.domain === 'string' ? seller.domain : undefined) ??
+        hostFromUrl(seller?.url) ??
+        hostFromUrl(shop?.onlineStoreUrl) ??
         hostFromUrl(offer.variantUrl) ??
-        hostFromUrl(offer.checkoutUrl)
+        hostFromUrl(offer.checkoutUrl) ??
+        hostFromUrl(offer.checkout_url)
     );
   }
 
@@ -276,7 +316,7 @@ export function summarizeProductDetailsResult(result: unknown): CatalogProductDe
     offerCount: offers.length,
     usesProductsSchema: products.length > 0,
     usesVariantsSchema: products.length === 0 && variants.length > 0,
-    offersWithCheckoutUrl: offers.filter((offer) => typeof offer.checkoutUrl === 'string').length,
+    offersWithCheckoutUrl: offers.filter((offer) => typeof offer.checkoutUrl === 'string' || typeof offer.checkout_url === 'string').length,
     currencies: uniqueSorted(currencies),
     merchantHosts: uniqueSorted(merchantHosts),
     productTitle: typeof product.title === 'string' ? product.title : undefined,
@@ -285,7 +325,30 @@ export function summarizeProductDetailsResult(result: unknown): CatalogProductDe
 
 export async function searchGlobalProducts(params: SearchProductsParams) {
   const args = buildSearchGlobalProductsArgs(params);
-  return callCatalogMcp('search_global_products', args);
+  return callCatalogMcp('search_catalog', args);
+}
+
+export interface LookupCatalogParams {
+  ids: string[];
+  context?: string;
+  ships_to?: string;
+}
+
+export async function lookupCatalog(params: LookupCatalogParams) {
+  const args: Record<string, unknown> = {
+    catalog: {
+      ids: params.ids,
+      ...(params.context || params.ships_to
+        ? {
+            context: {
+              ...(params.context && { intent: params.context }),
+              ...(params.ships_to && { address_country: params.ships_to }),
+            },
+          }
+        : {}),
+    },
+  };
+  return callCatalogMcp('lookup_catalog', args);
 }
 
 export interface GetProductDetailsParams {
@@ -305,13 +368,24 @@ export function extractBase62(upid: string): string {
 }
 
 export async function getGlobalProductDetails(params: GetProductDetailsParams) {
+  const selected = (params.product_options ?? []).flatMap((option) =>
+    option.values.map((value) => ({ name: option.key, label: value }))
+  );
   const args: Record<string, unknown> = {
-    upid: extractBase62(params.upid),
-    ...(params.context && { context: params.context }),
-    ...(params.product_options && { product_options: params.product_options }),
-    ...(params.ships_to && { ships_to: params.ships_to }),
-    ...(params.available_for_sale !== undefined && { available_for_sale: params.available_for_sale }),
-    ...(params.limit !== undefined && { limit: params.limit }),
+    catalog: {
+      id: gidForCatalogProduct(params.upid),
+      ...(selected.length > 0 && { selected }),
+      ...(params.context || params.ships_to
+        ? {
+            context: {
+              ...(params.context && { intent: params.context }),
+              ...(params.ships_to && { address_country: params.ships_to }),
+            },
+          }
+        : {}),
+      ...(params.ships_to && { filters: { ships_to: { country: params.ships_to } } }),
+      ...(selected.length > 0 && { preferences: selected.map((item) => item.name) }),
+    },
   };
-  return callCatalogMcp('get_global_product_details', args);
+  return callCatalogMcp('get_product', args);
 }

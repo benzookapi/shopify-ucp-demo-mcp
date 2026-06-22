@@ -94,6 +94,7 @@ export function renderMarkdownReport(run: HarnessRunResult): string {
       lines.push(`- Offers with products[]: ${s.offersWithProducts}`);
       lines.push(`- Offers with variants[]: ${s.offersWithVariants}`);
       lines.push(`- Offers with checkoutUrl: ${s.offersWithCheckoutUrl}`);
+      lines.push(`- Response shape: ${s.responseShape}`);
       lines.push(`- Merchant hosts: ${formatList(s.merchantHosts)}`);
       lines.push(`- Currencies: ${formatList(s.currencies)}`);
       lines.push('');
