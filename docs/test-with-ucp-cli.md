@@ -1,8 +1,8 @@
 # Testing with the UCP CLI
 
 This sample wraps two underlying Shopify MCPs — the **Catalog MCP**
-(`https://discover.shopifyapps.com/global/mcp`) and the per-shop
-**Checkout MCP** (`https://{shop}/api/ucp/mcp`, discovered via
+(`https://catalog.shopify.com/api/ucp/mcp`) and the per-shop
+**Cart / Checkout MCP** (discovered via
 `/.well-known/ucp`). Shopify ships an official CLI,
 [`@shopify/ucp-cli`](https://github.com/Shopify/ucp-cli), that talks to
 those endpoints directly using the canonical UCP tool names — so you can
@@ -76,22 +76,24 @@ You can also pass `--business` on every call instead.
 
 ### 4.1 `catalog search` — basic query
 
-The UCP spec name is `search_catalog`; the Catalog MCP exposes it as
-`search_global_products` and this server wraps it as `search_products`
-(see the [README](../README.md) mapping). The CLI invokes the spec form:
+The UCP spec name is `search_catalog`; this server wraps it as
+`search_products` (see the [README](../README.md) mapping). The CLI invokes the
+spec form:
 
 ```bash
 ucp catalog search \
   --set /query='American jeans' \
-  --set /context='buyer in Tokyo, Japan, prefers premium denim, ships from US to JP' \
+  --set /context/intent='buyer in Tokyo, Japan, prefers premium denim, ships from US to JP' \
   --set /context/address_country=JP \
+  --set /filters/ships_to/country=JP \
+  --set '/filters/ships_from/0/country=US' \
   --view :compact \
   --format md
 ```
 
-Expected: a list of universal offers. Each `offers[i].products[]` entry
-should contain a `checkoutUrl` belonging to a US-based store that ships to
-JP.
+Expected: a list of products. Current responses use `products[]` with
+`variants[].checkout_url`; older responses may use `offers[]` with
+`products[].checkoutUrl`.
 
 > 💡 `--input-schema` on any subcommand prints the live JSON schema — use
 > it to discover the exact filter keys your version of the spec accepts.
@@ -102,20 +104,22 @@ JP.
 ```bash
 ucp catalog search \
   --set /query='organic Japanese skincare' \
-  --set /context='buyer in Paris seeking natural ingredients' \
+  --set /context/intent='buyer in Paris seeking natural ingredients' \
   --set /context/address_country=FR \
-  --set /filters/min_price=20 \
-  --set /filters/max_price=80 \
+  --set /filters/price/min=2000 \
+  --set /filters/price/max=8000 \
   --view :compact
 ```
 
-Expected: all returned `priceRange.min.amount` values fall in `[20, 80]`.
+Expected: all returned `price_range.min.amount` values fall in `[2000, 8000]`
+minor currency units.
 
 ### 4.3 `catalog search` — image similarity
 
 This sample wraps Shopify Global Catalog image similarity by accepting
-`image_base64` and `image_content_type` on `search_products`. The underlying
-Catalog payload uses `like[].image`:
+`image_base64` and `image_content_type` on `search_products`. It also accepts
+`image_url` for clients that cannot pass binary attachments as base64. The
+underlying Catalog payload uses `catalog.like[].image`:
 
 ```bash
 IMAGE_BASE64="$(base64 -i ./reference-product.jpg | tr -d '\n')"
@@ -148,23 +152,25 @@ Expected: results are visually similar to the reference image and still include
 buyer-facing titles, prices, checkout URLs, and Markdown product images when
 Catalog returns image URLs.
 
-### 4.4 `catalog get_product` — by UPID
+For a real call, pass either `image_base64` plus `image_content_type`, or
+`image_url`, not both.
 
-Spec name is `get_product`; Catalog MCP calls it `get_global_product_details`
-and this sample wraps it as `get_product_details`. Use the Base62 ID from
-4.1's output (the `ID:` field, or the segment after `/p/` in any
-`gid://shopify/p/...` string):
+### 4.4 `catalog get_product` — by product ID
+
+Spec name is `get_product`; this sample wraps it as `get_product_details`. Use
+the product ID from 4.1's output. This sample accepts either the full
+`gid://shopify/p/...` value or the Base62 segment after `/p/`:
 
 ```bash
 ucp catalog get_product AbC123XyZ \
   --set /context/address_country=JP \
-  --set /product_options/Color=Indigo \
-  --set /product_options/Size=M \
+  --set '/selected/0={"name":"Color","label":"Indigo"}' \
+  --set '/selected/1={"name":"Size","label":"M"}' \
   --view :compact
 ```
 
-Expected: `product.products[]` (or `product.variants[]` on the alternate
-schema) contains one entry per shop that carries the requested variant.
+Expected: `product.variants[]` contains seller, price, availability, options,
+PDP URL, and `checkout_url` data for the requested variant.
 
 ### 4.4 `discover` — what does this merchant actually offer?
 
@@ -176,7 +182,7 @@ Returns the merchant's `/.well-known/ucp` services. If the response is
 empty for `dev.ucp.shopping`, the shop hasn't enabled Checkout MCP — the
 sections below will fail with `AuthenticationFailed` until they do.
 
-## 5. Checkout tests
+## 5. Cart and checkout tests
 
 Pick a shop from the catalog response above (the `shop.onlineStoreUrl`
 field). If the merchant hasn't enabled Checkout MCP, the standard
@@ -185,7 +191,42 @@ this server's
 [`formatCheckoutResponse`](../src/server.ts) falls back to surfacing that
 URL.
 
-### 5.1 `checkout create` — empty buyer + address
+### 5.1 `cart create` — optional basket step
+
+Use Cart MCP when the buyer wants to add, remove, or review items before
+checkout:
+
+```bash
+ucp cart create --business "$UCP_BUSINESS" \
+  --input '{
+    "line_items":[{"item":{"id":"gid://shopify/ProductVariant/12345"},"quantity":1}],
+    "context":{"address_country":"JP"}
+  }'
+```
+
+Expected: a cart response with an `id`, `line_items`, `totals`, and possibly a
+`continue_url`. Save the ID when testing checkout conversion:
+
+```bash
+CART_ID="..."   # from cart create
+```
+
+### 5.2 `cart update` — full replacement
+
+Cart update is full-replace. Carry forward every line item that should remain:
+
+```bash
+ucp cart update "$CART_ID" --business "$UCP_BUSINESS" \
+  --input '{
+    "line_items":[{"item":{"id":"gid://shopify/ProductVariant/12345"},"quantity":2}],
+    "context":{"address_country":"JP"}
+  }'
+```
+
+This sample's `update_cart` wrapper follows the same rule and asks the agent to
+include the complete `line_items` list.
+
+### 5.3 `checkout create` — from cart_id or direct line_items
 
 > ℹ️ **The `Shopify-Buyer-IP` header is required.** Shopify's Checkout MCP
 > requires a `Shopify-Buyer-IP` HTTP header with a valid IPv4 or IPv6
@@ -204,6 +245,12 @@ URL.
 > to discuss partner-program options.
 
 ```bash
+ucp checkout create --business "$UCP_BUSINESS" --cart-id "$CART_ID"
+```
+
+For a direct buy-now flow, skip cart and pass line items directly:
+
+```bash
 ucp checkout create --business "$UCP_BUSINESS" \
   --input '{
     "currency":"USD",
@@ -218,7 +265,7 @@ response contains a `checkout.id` — save it for the next call.
 CHECKOUT_ID="..."   # from the create response
 ```
 
-### 5.2 `checkout update` — PUT semantics, full payload
+### 5.4 `checkout update` — PUT semantics, full payload
 
 UCP's `update_checkout` is **PUT-style** — the body replaces the checkout
 state. Inspect the live schema first so you know what's writable on this
@@ -252,7 +299,7 @@ and one or more `messages[]` with `severity` starting with
 `requires_buyer_*`. See [escalation.md](./escalation.md) for what each
 state means.
 
-### 5.3 Handle escalation automatically
+### 5.5 Handle escalation automatically
 
 Once you've seen the `continue_url` once, wire up the escalation hook so
 the CLI launches it for you on subsequent runs:
@@ -263,7 +310,7 @@ export UCP_ON_ESCALATION='jq -r .url | xargs open'   # macOS
 # Persist by editing `escalation.command` in ~/.ucp/config.yaml
 ```
 
-### 5.4 `checkout get` — round-trip the state
+### 5.6 `checkout get` — round-trip the state
 
 ```bash
 ucp checkout get "$CHECKOUT_ID" --business "$UCP_BUSINESS"
@@ -273,7 +320,7 @@ Expected: the full checkout payload from 5.2, including any
 `shipping_method_handle` options the merchant offers. Use this to pick a
 shipping method for a follow-up `checkout update`.
 
-### 5.5 `checkout complete` — only when status is `ready_for_complete`
+### 5.7 `checkout complete` — only when status is `ready_for_complete`
 
 Once the buyer has finished the merchant-hosted step (or once enough fields
 are filled to bypass escalation), status flips to `ready_for_complete`.
@@ -288,7 +335,7 @@ receipt. This sample's
 [`complete_checkout`](../src/server.ts) wrapper accepts the same shape
 (taking an explicit `idempotency_key` arg for caller-supplied retries).
 
-### 5.6 `checkout cancel` — idempotency required
+### 5.8 `checkout cancel` — idempotency required
 
 ```bash
 ucp checkout cancel "$CHECKOUT_ID" --business "$UCP_BUSINESS"
@@ -327,12 +374,11 @@ without actually sending it — useful for diffing against the
 
 ## 7. What this sample doesn't exercise
 
-The UCP CLI also covers tools this sample deliberately skips. Listed here
-so you know they exist and can test them against Shopify directly:
+The UCP CLI also covers tools this sample does not wrap. Listed here so you
+know they exist and can test them against Shopify directly:
 
 | UCP CLI command | Purpose | Why this sample skips it |
 |---|---|---|
-| `cart create` / `cart get` / `cart update` / `cart cancel` | Cart resource between catalog and checkout | This demo goes straight to `checkout create`; see the "No cart layer" note in the [README](../README.md). |
 | `order get` | Fetch an order after `checkout complete` returns | Out of scope for the demo flow; receipts are surfaced via `permalink_url`. |
 | Order webhooks | Push notifications when an order's state changes | The demo finishes at `checkout complete`; no listener is wired. |
 
@@ -340,8 +386,9 @@ so you know they exist and can test them against Shopify directly:
 
 - [Shopify UCP CLI quickstart](https://shopify.dev/docs/agents/get-started/quickstart)
 - [`@shopify/ucp-cli` on GitHub](https://github.com/Shopify/ucp-cli)
-- [Shopify Catalog MCP reference](https://shopify.dev/docs/agents/catalog/mcp)
-- [Shopify Checkout MCP reference](https://shopify.dev/docs/agents/checkout/mcp)
+- [Shopify Global Catalog MCP](https://shopify.dev/docs/agents/catalog/global-catalog)
+- [Shopify Cart MCP](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp)
+- [Shopify Checkout MCP](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp)
 - [UCP specification (ucp.dev)](https://ucp.dev/)
 - This sample's [escalation walkthrough](./escalation.md) — what statuses
   the CLI tests above will surface and what the buyer experience looks

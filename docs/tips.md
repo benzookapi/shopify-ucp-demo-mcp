@@ -14,12 +14,19 @@ This document covers implementation tips for getting better results from the Sho
 
 ```json
 {
-  "name": "search_global_products",
+  "name": "search_catalog",
   "arguments": {
-    "query": "American-made denim jeans",
-    "context": "buyer in Tokyo looking for authentic US denim brands",
-    "ships_to": "JP",
-    "ships_from": "US"
+    "catalog": {
+      "query": "American-made denim jeans",
+      "context": {
+        "intent": "buyer in Tokyo looking for authentic US denim brands",
+        "address_country": "JP"
+      },
+      "filters": {
+        "ships_to": { "country": "JP" },
+        "ships_from": [{ "country": "US" }]
+      }
+    }
   }
 }
 ```
@@ -52,22 +59,31 @@ Always include:
 
 Shopify Global Catalog supports similarity search by passing an image in the
 `like` array. This sample exposes that as `image_base64` and
-`image_content_type` on `search_products`, then forwards it to Catalog as:
+`image_content_type` on `search_products`. It also accepts `image_url` as a
+client-compatibility fallback, then fetches and encodes the image server-side.
+The upstream Catalog request uses `catalog.like`:
 
 ```json
 {
-  "name": "search_global_products",
+  "name": "search_catalog",
   "arguments": {
-    "query": "similar jacket in natural fabric",
-    "context": "buyer in California looking for a visually similar jacket that ships within the US",
-    "like": [{
-      "image": {
-        "content_type": "image/jpeg",
-        "data": "<raw-base64-image-data>"
+    "catalog": {
+      "query": "similar jacket in natural fabric",
+      "context": {
+        "intent": "buyer in California looking for a visually similar jacket that ships within the US",
+        "address_country": "US"
+      },
+      "like": [{
+        "image": {
+          "content_type": "image/jpeg",
+          "data": "<raw-base64-image-data>"
+        }
+      }],
+      "filters": {
+        "ships_to": { "country": "US" },
+        "available": true
       }
-    }],
-    "ships_to": "US",
-    "available_for_sale": true
+    }
   }
 }
 ```
@@ -79,15 +95,15 @@ similarity search.
 
 ## 4. Show product ratings to help buyers choose
 
-The `search_global_products` response includes `rating: { value, count }` at both the universal product level and the per-shop offer level (`products[].rating`). Surface this in your UI so buyers can prioritize highly rated products.
+The `search_catalog` response may include `rating: { value, count }` at both the product level and the per-seller variant level. Surface this in your UI when present so buyers can prioritize highly rated products.
 
 ```json
 // In the search response:
 {
-  "offers": [{
+  "products": [{
     "title": "Levi's 501 Original Jeans",
     "rating": { "value": 4.8, "count": 312 },
-    "products": [{
+    "variants": [{
       "rating": { "value": 4.9, "count": 87 },
       ...
     }]
@@ -100,11 +116,14 @@ This sample server displays ratings inline in search results:
 1. **Levi's 501 Original Jeans** — 89.00 USD  ⭐ 4.8 (312)
 ```
 
-## 5. `products_limit` is capped at 10
+## 5. Use pagination limit and minor-unit price filters
 
-The `products_limit` parameter controls how many per-shop offers are returned per universal product. The API maximum is **10** (default: 10). There is no way to retrieve more than 10 per-shop offers per product in a single call.
+The latest Catalog MCP request shape puts result count under
+`catalog.pagination.limit` and price filters under `catalog.filters.price`.
+Amounts are minor currency units: `15000` means $150.00 USD.
 
-If you need to compare more shops for a single product, consider calling `get_global_product_details` with different `ships_to` / `ships_from` combinations.
+If you need fresh variant-level detail for a specific product, call
+`get_product` with the product ID and selected option labels.
 
 ## 6. Discover Checkout MCP via /.well-known/ucp and fall back gracefully
 
@@ -155,18 +174,18 @@ The `currency` argument for `create_checkout` must match the **merchant's pricin
 
 This sample server's `create_checkout` tool description tells the AI explicitly: *"Pass the currency shown for the selected offer in the preceding get_product_details output. Do NOT infer from the buyer's country."* The sequence diagram in [sequence-diagram.md](sequence-diagram.md) also marks this handoff.
 
-## 8. Token caching — hardcode the TTL
+## 8. Token caching — honor `expires_in` with a fallback
 
-The bearer token from `api.shopify.com/auth/access_token` is documented as valid for 60 minutes, but the response body **does not include an `expires_in` field** — measured 2026-05-19, the only keys returned are `access_token` and `token_type`. A naive `Date.now() + data.expires_in * 1000` becomes `NaN` and your cache never hits.
+The bearer token from `api.shopify.com/auth/access_token` is documented as valid for 60 minutes. Some responses include `expires_in`; older responses may omit it. Use `expires_in` when present and fall back to the documented 60-minute TTL.
 
-Hardcode the documented 60-minute TTL and refresh with a 5-minute buffer:
+Refresh with a 5-minute buffer:
 
 ```ts
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
 // On successful fetch:
-tokenExpiresAt = Date.now() + TOKEN_TTL_MS;
+tokenExpiresAt = Date.now() + (data.expires_in ? data.expires_in * 1000 : TOKEN_TTL_MS);
 
 // On every getBearerToken() call:
 if (cachedToken && Date.now() < tokenExpiresAt - EXPIRY_BUFFER_MS) {
@@ -174,11 +193,11 @@ if (cachedToken && Date.now() < tokenExpiresAt - EXPIRY_BUFFER_MS) {
 }
 ```
 
-The same token is used for both the Catalog MCP and the Checkout MCP — no separate credentials are needed.
+The same token is used for Catalog, Cart, and Checkout MCP calls — no separate credentials are needed.
 
 ## 9. Skip the Catalog MCP `initialize` handshake
 
-The MCP spec describes an `initialize` request that returns an `mcp-session-id` header used by subsequent `tools/call` requests. Measured 2026-05-19, the Catalog MCP at `https://discover.shopifyapps.com/global/mcp` accepts `tools/call` **directly** with no prior `initialize` and no session header — and returns HTTP 200 in ~390ms.
+The MCP spec describes an `initialize` request that returns an `mcp-session-id` header used by subsequent `tools/call` requests. The Global Catalog MCP accepts `tools/call` **directly** with no prior `initialize` in this sample's usage.
 
 Sending `initialize` first doubles the round-trips for every search and detail call without any functional benefit. Go straight to `tools/call`:
 
@@ -193,7 +212,7 @@ const response = await fetch(CATALOG_MCP_URL, {
   body: JSON.stringify({
     jsonrpc: '2.0',
     method: 'tools/call',
-    params: { name: 'search_global_products', arguments: { ... } },
+    params: { name: 'search_catalog', arguments: { ... } },
     id: 1,
   }),
 });
@@ -201,7 +220,8 @@ const response = await fetch(CATALOG_MCP_URL, {
 
 ## References
 
-- [Catalog MCP Reference](https://shopify.dev/docs/agents/catalog/mcp)
-- [Checkout MCP Reference](https://shopify.dev/docs/agents/checkout/mcp)
+- [Global Catalog MCP](https://shopify.dev/docs/agents/catalog/global-catalog)
+- [Cart MCP](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp)
+- [Checkout MCP](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp)
 - [About Shopify Catalog](https://shopify.dev/docs/agents/catalog)
 - [Universal Commerce Protocol](https://ucp.dev)

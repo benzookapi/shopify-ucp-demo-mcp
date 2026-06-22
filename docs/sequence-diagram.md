@@ -7,33 +7,40 @@ sequenceDiagram
     participant A as AI Agent<br/>(Claude Code)
     participant M as Demo MCP Server<br/>(Render)
     participant T as Shopify Auth<br/>(api.shopify.com)
-    participant C as Shopify Catalog MCP<br/>(discover.shopifyapps.com)
-    participant K as Shopify Checkout MCP<br/>({shop}.myshopify.com)
+    participant C as Shopify Global Catalog MCP<br/>(catalog.shopify.com)
+    participant K as Shopify Cart / Checkout MCP<br/>(merchant endpoint)
 
-    Note over A,K: 1. Authentication — token cached 55min (60min TTL − 5min buffer)
+    Note over A,K: 1. Authentication — token cached until expires_in or 60min fallback, with a 5min buffer
 
     A->>M: POST /mcp · tools/call: search_products
     M->>T: POST /auth/access_token<br/>{client_id, client_secret, grant_type}
-    T-->>M: {access_token, token_type}<br/>(no expires_in — hardcode 60min TTL)
+    T-->>M: {access_token, token_type, expires_in?}
 
     Note over A,K: 2. Product Search
 
-    M->>C: POST /global/mcp · tools/call: search_global_products<br/>{query, context, ships_to, limit}
-    C-->>M: {offers: [{id, title, options, priceRange,<br/>products[], variants[], url}]}
+    M->>C: POST /api/ucp/mcp · tools/call: search_catalog<br/>{catalog: {query, context, filters, pagination}}
+    C-->>M: {products: [{id, title, options, price_range,<br/>variants[], media[], url}]}
     M-->>A: Found N products — titles, prices,<br/>options (size/color), Base62 UPIDs
 
     Note over A,K: 3. Product Detail
 
     A->>M: tools/call: get_product_details<br/>{upid, ships_to, color, size}
     M->>T: (use cached token or refresh)
-    M->>C: POST /global/mcp · tools/call: get_global_product_details<br/>{upid, ships_to, product_options}
-    C-->>M: {product: {id, description, options,<br/>variants: [{checkoutUrl, displayName, price}]}}
-    M-->>A: Variant list with checkoutUrls,<br/>prices, and availability
+    M->>C: POST /api/ucp/mcp · tools/call: get_product<br/>{catalog: {id, selected, filters}}
+    C-->>M: {product: {id, description, options,<br/>variants: [{checkout_url, seller, price, availability}]}}
+    M-->>A: Variant list with checkout URLs,<br/>prices, sellers, and availability
 
     Note over A,K: 4. Checkout — discovery via /.well-known/ucp
 
-    Note over A: AI carries currency + variant_id<br/>from the get_product_details<br/>response (do NOT infer currency<br/>from buyer country)
-    A->>M: tools/call: create_checkout<br/>{shop_domain, currency, line_items}
+    opt Basket-building flow
+        A->>M: tools/call: create_cart<br/>{shop_domain, line_items, context}
+        M->>K: tools/call: create_cart<br/>{cart: {line_items, context}}
+        K-->>M: {id, line_items, totals}
+        M-->>A: Cart ID + totals
+    end
+
+    Note over A: AI carries currency + variant_id<br/>or cart_id from prior steps<br/>(do NOT infer currency<br/>from buyer country)
+    A->>M: tools/call: create_checkout<br/>{shop_domain, cart_id}<br/>or {currency, line_items}
 
     Note over M: Resolve canonical Checkout MCP<br/>endpoint via UCP discovery<br/>(cached after first hit)
     M->>K: GET https://{shop}/.well-known/ucp
@@ -42,7 +49,7 @@ sequenceDiagram
         K-->>M: 200 · {ucp.services["dev.ucp.shopping"]<br/>[{transport: "mcp", endpoint}]}
 
         Note over M,K: All Checkout MCP calls forward buyer IP<br/>via Shopify-Buyer-IP header (required) + body signal<br/>checkout.signals["dev.ucp.buyer_ip"] (spec-compliance)
-        M->>K: POST {endpoint} · tools/call: create_checkout<br/>{meta: {ucp-agent: {profile}},<br/>checkout: {currency, line_items, signals}}
+        M->>K: POST {endpoint} · tools/call: create_checkout<br/>{meta: {ucp-agent: {profile}}, cart_id}<br/>or {checkout: {currency, line_items, signals}}
         K-->>M: {id, status: incomplete, continue_url}
         M-->>A: Status: incomplete · checkout_id<br/>(continue_url decorated with<br/>utm_source + skip_shop_pay=true)
 
@@ -73,19 +80,19 @@ sequenceDiagram
 
 ### Token caching
 
-The Demo MCP Server caches the bearer token from `api.shopify.com/auth/access_token` for 55 minutes (5-minute buffer before the documented 60-minute expiry). The `/auth/access_token` response does not include an `expires_in` field — measured 2026-05-19, response keys are only `[access_token, token_type]` — so the TTL is hardcoded against Shopify's documented value. If the cached token is still valid, the auth request is skipped on subsequent calls. The same token is used for both the Catalog MCP and the Checkout MCP.
+The Demo MCP Server caches the bearer token from `api.shopify.com/auth/access_token` until `expires_in` when present, otherwise for Shopify's documented 60-minute expiry, with a 5-minute refresh buffer. If the cached token is still valid, the auth request is skipped on subsequent calls. The same token is used for Catalog, Cart, and Checkout MCP calls.
 
 ### Catalog MCP — no initialize handshake
 
-Calls to the Catalog MCP go straight to `tools/call` with no prior `initialize` handshake. Measured 2026-05-19: `tools/call` returns HTTP 200 in ~390ms with no `mcp-session-id` header issued or required. Skipping `initialize` halves the round-trips per user request.
+Calls to the Global Catalog MCP go straight to `tools/call` with no prior `initialize` handshake. Skipping `initialize` halves the round-trips per user request in this sample.
 
 ### Dual response schema from Catalog MCP
 
-`get_global_product_details` may return per-shop offers as either:
-- `product.products[]` — documented schema (shop name, checkoutUrl, selectedProductVariant)
-- `product.variants[]` — alternate schema observed in practice (displayName, checkoutUrl, price)
+Catalog responses may return per-shop offers as either:
+- `products[]` / `product.products[]` — older schema (shop name, checkoutUrl, selectedProductVariant)
+- `products[].variants[]` / `product.variants[]` — current schema (seller, checkout_url, price, availability)
 
-The server handles both and extracts `checkoutUrl` from whichever is present.
+The server handles both and extracts `checkoutUrl` / `checkout_url` from whichever is present.
 
 ### Checkout MCP discovery and fallback
 

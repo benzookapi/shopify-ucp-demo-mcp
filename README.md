@@ -7,8 +7,14 @@ A Remote MCP server that lets any AI agent (Claude, ChatGPT, etc.) search Shopif
 | Tool | Description |
 |---|---|
 | `search_products` | Search hundreds of millions of products across all Shopify merchants by text or image similarity |
+| `lookup_products` | Refresh known Catalog product or variant IDs without running a new search |
 | `get_product_details` | Get full variant details and checkout URLs for a specific product |
+| `create_cart` | Create a merchant cart for basket building |
+| `get_cart` | Retrieve an existing merchant cart |
+| `update_cart` | Replace the full cart line-item state |
+| `cancel_cart` | Cancel an active cart |
 | `create_checkout` | Start a checkout session on a merchant's store |
+| `get_checkout` | Retrieve an existing checkout state |
 | `update_checkout` | Add buyer info, shipping address, select shipping method |
 | `complete_checkout` | Place the order when checkout status is `ready_for_complete` |
 | `cancel_checkout` | Cancel an active checkout session |
@@ -20,15 +26,21 @@ canonical Universal Commerce Protocol tools defined by Shopify. The mapping is:
 
 | This server | UCP / Shopify spec tool | Endpoint |
 |---|---|---|
-| `search_products` | [`search_global_products`](https://shopify.dev/docs/agents/catalog/mcp) | Catalog MCP — `https://discover.shopifyapps.com/global/mcp` |
-| `get_product_details` | [`get_global_product_details`](https://shopify.dev/docs/agents/catalog/mcp) | Catalog MCP — `https://discover.shopifyapps.com/global/mcp` |
-| `create_checkout` | [`create_checkout`](https://shopify.dev/docs/agents/checkout/mcp) | Checkout MCP — `https://{shop}/api/ucp/mcp` |
-| `update_checkout` | [`update_checkout`](https://shopify.dev/docs/agents/checkout/mcp) (PUT semantics) | Checkout MCP — `https://{shop}/api/ucp/mcp` |
-| `complete_checkout` | [`complete_checkout`](https://shopify.dev/docs/agents/checkout/mcp) | Checkout MCP — `https://{shop}/api/ucp/mcp` |
-| `cancel_checkout` | [`cancel_checkout`](https://shopify.dev/docs/agents/checkout/mcp) | Checkout MCP — `https://{shop}/api/ucp/mcp` |
+| `search_products` | [`search_catalog`](https://shopify.dev/docs/agents/catalog/global-catalog#search_catalog) | Global Catalog MCP — `https://catalog.shopify.com/api/ucp/mcp` |
+| `lookup_products` | [`lookup_catalog`](https://shopify.dev/docs/agents/catalog/global-catalog#lookup_catalog) | Global Catalog MCP — `https://catalog.shopify.com/api/ucp/mcp` |
+| `get_product_details` | [`get_product`](https://shopify.dev/docs/agents/catalog/global-catalog#get_product) | Global Catalog MCP — `https://catalog.shopify.com/api/ucp/mcp` |
+| `create_cart` | [`create_cart`](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp#create_cart) | Cart MCP — discovered via `/.well-known/ucp` |
+| `get_cart` | [`get_cart`](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp#get_cart) | Cart MCP — discovered via `/.well-known/ucp` |
+| `update_cart` | [`update_cart`](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp#update_cart) (full replacement) | Cart MCP — discovered via `/.well-known/ucp` |
+| `cancel_cart` | [`cancel_cart`](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp#cancel_cart) | Cart MCP — discovered via `/.well-known/ucp` |
+| `create_checkout` | [`create_checkout`](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp#create_checkout) | Checkout MCP — discovered via `/.well-known/ucp` |
+| `get_checkout` | [`get_checkout`](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp#get_checkout) | Checkout MCP — discovered via `/.well-known/ucp` |
+| `update_checkout` | [`update_checkout`](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp#update_checkout) (PUT semantics) | Checkout MCP — discovered via `/.well-known/ucp` |
+| `complete_checkout` | [`complete_checkout`](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp#complete_checkout) | Checkout MCP — discovered via `/.well-known/ucp` |
+| `cancel_checkout` | [`cancel_checkout`](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp#cancel_checkout) | Checkout MCP — discovered via `/.well-known/ucp` |
 
 Every outgoing call carries `meta.ucp-agent.profile` (see `UCP_AGENT_PROFILE` below).
-Calls that mutate state (`complete_checkout`, `cancel_checkout`) also carry
+Calls that mutate state (`cancel_cart`, `complete_checkout`, `cancel_checkout`) also carry
 `meta.idempotency-key` so retries are safe.
 
 ### Image similarity search
@@ -39,26 +51,29 @@ a base64-encoded image:
 - `image_base64` — raw base64 image data, without a `data:` URL prefix
 - `image_content_type` — MIME type such as `image/jpeg`, `image/png`, or
   `image/webp`
+- `image_url` — optional HTTP(S) image URL fallback for clients that can render
+  or pass Markdown image URLs but do not pass binary attachments as base64 tool
+  arguments
 
 When `query` is also provided, Catalog uses the text to narrow the visual
-similarity search. When only `image_base64` is provided, Catalog searches for
-visually similar products. Continue to pass `context` and `ships_to` so results
-are relevant and shippable for the buyer.
+similarity search. When only an image is provided, Catalog searches for visually
+similar products. Continue to pass `context` and `ships_to` so results are
+relevant and shippable for the buyer.
 
-### No cart layer — by design
+### Cart layer
 
 The full UCP spec defines a cart resource (`create_cart` / `get_cart` /
 `update_cart` / `cancel_cart`) between catalog search and checkout. This sample
-**skips the cart layer on purpose** and goes straight from `get_product_details`
-to `create_checkout`, because:
+now exposes those tools as thin wrappers for basket-building demos. You can
+still skip cart for a single-item buy-now flow by calling `create_checkout` with
+direct `line_items`.
 
-- Most agent flows in this demo are single-line-item ("buy this one item") and a
-  cart adds a round-trip without changing the outcome.
-- Shopify's Checkout MCP can ingest the `line_items` directly when the checkout
-  is created, so cart state lives inside the checkout session.
-- Adding the cart layer is mechanical when needed; see
-  [docs/escalation.md](docs/escalation.md) for the full UCP tool set this would
-  expose.
+For multi-step shopping, prefer:
+
+1. `search_products` / `get_product_details`
+2. `create_cart`
+3. `get_cart` / `update_cart` while the buyer iterates
+4. `create_checkout` with `cart_id`
 
 ## Architecture
 
@@ -66,8 +81,8 @@ to `create_checkout`, because:
 User's AI (Claude / ChatGPT / etc.)
     ↓  Remote MCP  (Streamable HTTP POST /mcp)
 This Server  (Node.js on Render)
-    ├──→  Shopify Catalog MCP  (https://discover.shopifyapps.com/global/mcp)
-    └──→  Shopify Checkout MCP (https://{shop}/api/ucp/mcp)
+    ├──→  Shopify Global Catalog MCP  (https://catalog.shopify.com/api/ucp/mcp)
+    └──→  Shopify Cart / Checkout MCP (discovered via /.well-known/ucp)
 ```
 
 For a detailed sequence diagram showing the full interaction flow between the AI Agent, Demo MCP Server, and Shopify APIs, see [docs/sequence-diagram.md](docs/sequence-diagram.md).
@@ -282,8 +297,9 @@ pnpm run typecheck    # type-check without emitting
 
 - [Shopify Agentic Commerce Docs](https://shopify.dev/docs/agents)
 - [Universal Commerce Protocol](https://ucp.dev)
-- [Catalog MCP Reference](https://shopify.dev/docs/agents/catalog/mcp)
-- [Checkout MCP Reference](https://shopify.dev/docs/agents/checkout/mcp)
+- [Global Catalog MCP](https://shopify.dev/docs/agents/catalog/global-catalog)
+- [Cart MCP](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp)
+- [Checkout MCP](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp)
 - [MCP Specification](https://modelcontextprotocol.io)
 
 ## Disclaimer

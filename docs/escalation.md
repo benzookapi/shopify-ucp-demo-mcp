@@ -5,8 +5,8 @@ This document explains the **escalation** concept in [Shopify's Agentic Commerce
 Everything below is derived from publicly available sources:
 
 - [Shopify Agentic Commerce docs](https://shopify.dev/docs/agents)
-- [Shopify Checkout MCP reference](https://shopify.dev/docs/agents/checkout/mcp)
-- [Shopify ECP reference](https://shopify.dev/docs/agents/checkout/ecp)
+- [Shopify Checkout MCP reference](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp)
+- [Shopify ECP reference](https://shopify.dev/docs/agents/carts-and-checkout)
 - [UCP specification (ucp.dev)](https://ucp.dev/)
 - [Building the Universal Commerce Protocol (Shopify Engineering)](https://shopify.engineering/ucp)
 - [Under the Hood — UCP (Google Developers Blog)](https://developers.googleblog.com/under-the-hood-universal-commerce-protocol-ucp/)
@@ -22,7 +22,7 @@ The decision whether to escalate is owned by the merchant's UCP backend at runti
 
 References:
 
-- [Checkout MCP — status lifecycle](https://shopify.dev/docs/agents/checkout/mcp)
+- [Checkout MCP — status lifecycle](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp)
 - [UCP shopping checkout spec](https://ucp.dev/)
 
 ## The four UCP actors
@@ -73,11 +73,11 @@ flowchart TB
 
 **Why mode A is not demoable here**: it requires integrating with a Credential Provider (e.g., Shop Pay account with a saved card, or Google Pay / Apple Pay token exchange via AP2). This sample's `create_checkout` does not supply a payment credential, so the merchant's runtime will route to mode B in practice.
 
-Reference: [Shopify Checkout MCP — status lifecycle](https://shopify.dev/docs/agents/checkout/mcp), [Shopify Engineering: Building UCP](https://shopify.engineering/ucp) (handoff section).
+Reference: [Shopify Checkout MCP — status lifecycle](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp), [Shopify Engineering: Building UCP](https://shopify.engineering/ucp) (handoff section).
 
 ## Status state machine
 
-The Checkout MCP returns a `status` on every response, and the agent drives the flow off it. The diagram below is the canonical UCP state machine from the [Checkout MCP reference](https://shopify.dev/docs/agents/checkout/mcp); the right column shows which tool in this sample is called at each step.
+The Checkout MCP returns a `status` on every response, and the agent drives the flow off it. The diagram below is the canonical UCP state machine from the [Checkout MCP reference](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp); the right column shows which tool in this sample is called at each step.
 
 ```mermaid
 stateDiagram-v2
@@ -129,14 +129,14 @@ sequenceDiagram
 
     Buyer->>Agent: "American-made jeans for Tokyo"
     Agent->>Sample: tools/call: search_products
-    Sample->>Catalog: search_global_products<br/>ships_to=JP, ships_from=US
-    Catalog-->>Sample: offers[] with checkoutUrl
+    Sample->>Catalog: search_catalog<br/>{catalog: {filters: ships_to=JP, ships_from=US}}
+    Catalog-->>Sample: products[] with variants[].checkout_url
     Sample-->>Agent: Product list + UPIDs
 
     Buyer->>Agent: "Tell me about the first one in size M"
     Agent->>Sample: get_product_details
-    Sample->>Catalog: get_global_product_details<br/>{upid, ships_to, product_options}
-    Catalog-->>Sample: variants[] with price.currencyCode
+    Sample->>Catalog: get_product<br/>{catalog: {id, selected, filters}}
+    Catalog-->>Sample: variants[] with price.currency
     Note over Sample: src/server.ts surfaces the<br/>currencyCode for handoff
 
     Buyer->>Agent: "I'll buy it"
@@ -174,7 +174,8 @@ Key implementation references:
 - **Status-driven dispatch** lives in the AI's tool descriptions, not in code: see the `update_checkout` description in [src/server.ts](../src/server.ts) where the AI is told "if status is `requires_escalation`, show the `continue_url` to the buyer"
 - **Fallback path** for non-UCP shops: `src/checkout.ts` resolves the Checkout MCP endpoint via `/.well-known/ucp`. When the manifest returns 404 (or has no `dev.ucp.shopping` MCP transport), `resolveCheckoutMcpUrl` throws `UcpNotSupportedError` — `create_checkout` catches it and tells the AI to use the Catalog MCP's `checkoutUrl` cart permalink instead. See the catch block in [src/server.ts](../src/server.ts) around the `UcpNotSupportedError` instance check.
 - **continue_url decoration** appends `utm_source=ucp_demo_app` and `skip_shop_pay=true` so the buyer lands on the Shopify-hosted checkout with the prefilled address visible (and not on the Shop Pay OTP prompt) — see `decorateContinueUrl` in [src/server.ts](../src/server.ts).
-- **Currency handoff** from `get_product_details` into `create_checkout` is documented in [tips.md §6](tips.md)
+- **Cart handoff** is supported: `create_cart` can be used for basket-building, and `create_checkout` accepts `cart_id` to convert that cart into a checkout.
+- **Currency handoff** from `get_product_details` into direct `create_checkout` line-item flows is documented in [tips.md §7](tips.md)
 
 ## What this sample deliberately does **not** demo
 
@@ -183,8 +184,8 @@ Be honest with viewers about scope:
 | Concept | Demoed here? | Why not |
 |---|---|---|
 | UCP agent-only completion (buyer never leaves chat) | ❌ | Requires Credential Provider integration (Shop Pay / Google Pay / Apple Pay via AP2). Out of scope for a server-only MCP sample. |
-| ECP — Embedded Checkout Protocol | ❌ | Requires a host app with WebView + JSON-RPC handlers. See [ECP docs](https://shopify.dev/docs/agents/checkout/ecp). |
-| `ec_delegate` agent-side delegation | ❌ | Only relevant for ECP-embedded flows. See [ECP `ec_delegate`](https://shopify.dev/docs/agents/checkout/ecp). |
+| ECP — Embedded Checkout Protocol | ❌ | Requires a host app with WebView + JSON-RPC handlers. See [Carts and checkout docs](https://shopify.dev/docs/agents/carts-and-checkout). |
+| `ec_delegate` agent-side delegation | ❌ | Only relevant for ECP-embedded flows. See [Carts and checkout docs](https://shopify.dev/docs/agents/carts-and-checkout). |
 | Merchant Agentic Storefronts configuration | ❌ | Merchant Admin UI concern, not an MCP server concern. See [Agentic Storefronts admin docs](https://help.shopify.com/en/manual/online-sales-channels/agentic-storefronts). |
 | Specific runtime escalation triggers | ❌ | Merchant-runtime decision; the public spec exposes the resulting `status` and `continue_url` but not the input signals. |
 
@@ -194,8 +195,8 @@ For these, follow the [UCP specification](https://ucp.dev/) and [Shopify Agentic
 
 - [UCP Specification](https://ucp.dev/) — full protocol, including the canonical status lifecycle
 - [Shopify Agentic Commerce](https://shopify.dev/docs/agents) — developer landing page
-- [Shopify Checkout MCP Reference](https://shopify.dev/docs/agents/checkout/mcp) — `create/update/complete_checkout` shapes
-- [Shopify ECP Reference](https://shopify.dev/docs/agents/checkout/ecp) — the embedded alternative not demoed here
+- [Shopify Cart MCP Reference](https://shopify.dev/docs/agents/carts-and-checkout/cart-mcp) — `create/get/update/cancel_cart` shapes
+- [Shopify Checkout MCP Reference](https://shopify.dev/docs/agents/carts-and-checkout/checkout-mcp) — `create/update/complete_checkout` shapes
 - [Shopify Engineering: Building UCP](https://shopify.engineering/ucp) — design rationale
 - [How agentic commerce works (Shopify Blog)](https://www.shopify.com/blog/how-agentic-commerce-works) — eligibility, channel availability
 - [Google Developers Blog — UCP](https://developers.googleblog.com/under-the-hood-universal-commerce-protocol-ucp/) — co-developer's perspective
