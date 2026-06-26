@@ -65,7 +65,7 @@ function redactRunResult(run: HarnessRunResult): HarnessRunResult {
 
 export function renderMarkdownReport(run: HarnessRunResult): string {
   const lines: string[] = [];
-  lines.push('# UCP Demo Harness Report');
+  lines.push('# UCP Demo Self-Test Report');
   lines.push('');
   lines.push(`Generated: ${run.generatedAt}`);
   lines.push(`Duration: ${run.durationMs}ms`);
@@ -148,8 +148,8 @@ export async function writeReports(
   await mkdir(reportDir, { recursive: true });
   const reportRun = options.includeMerchantDetails ? run : redactRunResult(run);
   const stamp = sanitizeFilePart(run.generatedAt.replace(/[:.]/g, '-'));
-  const jsonPath = join(reportDir, `ucp-demo-harness-${stamp}.json`);
-  const markdownPath = join(reportDir, `ucp-demo-harness-${stamp}.md`);
+  const jsonPath = join(reportDir, `ucp-demo-self-test-${stamp}.json`);
+  const markdownPath = join(reportDir, `ucp-demo-self-test-${stamp}.md`);
 
   await writeFile(jsonPath, `${JSON.stringify(reportRun, null, 2)}\n`, 'utf8');
   await writeFile(markdownPath, renderMarkdownReport(reportRun), 'utf8');

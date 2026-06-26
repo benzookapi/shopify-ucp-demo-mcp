@@ -77,12 +77,12 @@ function toAbsolute(path: string): string {
 }
 
 function printHelp(): void {
-  console.log(`UCP Demo Harness
+  console.log(`UCP Demo Self-Test
 
 Usage:
-  pnpm run harness
-  pnpm run harness -- --case harness/cases/us-made-denim-to-jp.json
-  pnpm run harness -- --list
+  pnpm run self-test
+  pnpm run self-test -- --case harness/cases/us-made-denim-to-jp.json
+  pnpm run self-test -- --list
 
 Options:
   --case <path>        Run one case file
@@ -248,13 +248,13 @@ async function main(): Promise<void> {
     needsCatalogCredentials &&
     (!process.env.SHOPIFY_CLIENT_ID || !process.env.SHOPIFY_CLIENT_SECRET)
   ) {
-    throw new Error('SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET must be set to run the harness');
+    throw new Error('SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET must be set to run the self-test');
   }
 
   const started = Date.now();
   const results: HarnessCaseResult[] = [];
   for (const item of cases) {
-    console.log(`[harness] running ${item.testCase.name}`);
+    console.log(`[self-test] running ${item.testCase.name}`);
     results.push(await runCase(item.testCase));
   }
 
@@ -273,8 +273,8 @@ async function main(): Promise<void> {
   const paths = await writeReports(run, options.reportDir, {
     includeMerchantDetails: options.includeMerchantDetails,
   });
-  console.log(`[harness] wrote ${paths.markdownPath}`);
-  console.log(`[harness] wrote ${paths.jsonPath}`);
+  console.log(`[self-test] wrote ${paths.markdownPath}`);
+  console.log(`[self-test] wrote ${paths.jsonPath}`);
 
   if (run.totals.failed > 0 || run.totals.errored > 0) {
     process.exitCode = 1;
@@ -282,6 +282,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`[harness] ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`[self-test] ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
 });

@@ -9,7 +9,9 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
+    "typecheck:self-test": "tsc --noEmit -p tsconfig.harness.json",
     "typecheck:harness": "tsc --noEmit -p tsconfig.harness.json",
+    "self-test": "tsx harness/run-cases.ts",
     "harness": "tsx harness/run-cases.ts"
   },
   "dependencies": {

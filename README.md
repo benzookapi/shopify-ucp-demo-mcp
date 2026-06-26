@@ -93,10 +93,10 @@ For implementation tips on improving search quality, ratings, and checkout handl
 
 To verify the wire format using Shopify's official [`@shopify/ucp-cli`](https://shopify.dev/docs/agents/get-started/quickstart) — including the spec-named tools (`search_catalog`, `get_product`, `create_checkout`, etc.) that this sample wraps — see [docs/test-with-ucp-cli.md](docs/test-with-ucp-cli.md).
 
-## UCP Demo Harness
+## UCP Demo Self-Test
 
-The `harness/` directory contains a lightweight regression and diagnosis
-harness for demo-quality checks. It runs saved buyer-intent cases against the
+The historically named `harness/` directory contains lightweight self-tests and
+diagnostics for demo-quality checks. It runs saved buyer-intent cases against the
 same Catalog and Checkout discovery code used by the MCP server, then writes a
 JSON and Markdown report with:
 
@@ -108,7 +108,7 @@ JSON and Markdown report with:
   `shipping_filter_too_strict`, `response_shape_changed`, and
   `checkout_ucp_unsupported`
 
-Committed harness cases do not hardcode specific merchant names or domains.
+Committed self-test cases do not hardcode specific merchant names or domains.
 Merchant discovery checks use merchants returned by live Catalog results, and
 reports redact live merchant domains and endpoints by default. If you need to
 debug a specific merchant, keep that case under ignored `harness/private/` and
@@ -117,19 +117,19 @@ run with `--include-merchant-details` only for local diagnosis.
 Run every sample case:
 
 ```bash
-pnpm run harness
+pnpm run self-test
 ```
 
 Run one case:
 
 ```bash
-pnpm run harness -- --case harness/cases/us-made-denim-to-jp.json
+pnpm run self-test -- --case harness/cases/us-made-denim-to-jp.json
 ```
 
 List cases without making network calls:
 
 ```bash
-pnpm run harness -- --list
+pnpm run self-test -- --list
 ```
 
 Reports are written to `harness/reports/` and are intentionally ignored by Git.
@@ -139,8 +139,11 @@ UCP shopping endpoint does not appear.
 To include live merchant domains and endpoints in local-only reports:
 
 ```bash
-pnpm run harness -- --include-merchant-details
+pnpm run self-test -- --include-merchant-details
 ```
+
+`pnpm run harness` remains as a backward-compatible alias for older local
+notes and scripts.
 
 ## Setup
 
