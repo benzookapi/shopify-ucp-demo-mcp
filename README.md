@@ -213,6 +213,19 @@ For Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
+For Claude mobile app via Claude web Custom Connector:
+
+1. Open Claude web with the same account you use in the mobile app.
+2. Go to **Settings** → **Connectors**.
+3. Add a **Custom Connector**.
+4. Use a clear name such as `Shopify UCP Demo`.
+5. Set the connector endpoint to:
+   ```text
+   https://your-app-name.onrender.com/mcp
+   ```
+6. Save the connector, then open Claude mobile app and select it from the
+   connector list before asking product discovery or checkout questions.
+
 For Claude Code (CLI):
 
 ```bash
