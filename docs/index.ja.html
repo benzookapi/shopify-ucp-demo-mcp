@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>UCP Demo Overview — Japanese</title>
+    <title>UCP概要</title>
     <style>
       :root {
         color-scheme: light;
@@ -15,14 +15,17 @@
         --green-dark: #004c3f;
         --lime: #95bf47;
         --blue: #2f6f9f;
+        --blue-dark: #254b69;
         --amber: #c77700;
+        --amber-dark: #735000;
         --paper: #ffffff;
         --soft-green: #e6f2ea;
         --soft-blue: #e8f1f7;
         --soft-amber: #fbefd9;
+        --soft-gray: #eef3ef;
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
+          "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui,
+          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       * {
@@ -39,15 +42,15 @@
         color: var(--ink);
       }
 
+      body:has(#comparison:target) main > .page:not(#comparison) {
+        display: none;
+      }
+
       .page {
         min-height: 100vh;
         display: grid;
         place-items: center;
         padding: 16px;
-      }
-
-      body:has(#comparison:target) main > .page:first-child {
-        display: none;
       }
 
       .slide {
@@ -64,13 +67,6 @@
       }
 
       header {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 24px;
-        align-items: end;
-      }
-
-      header > * {
         min-width: 0;
       }
 
@@ -85,32 +81,20 @@
 
       h1 {
         margin: 0;
-        max-width: 980px;
-        font-size: clamp(38px, 4.4vw, 64px);
-        line-height: 0.95;
+        max-width: none;
+        font-size: clamp(18px, 3.1vw, 54px);
+        line-height: 1;
         letter-spacing: 0;
-        overflow-wrap: anywhere;
+        overflow-wrap: normal;
+        white-space: nowrap;
       }
 
       .subtitle {
         margin: 14px 0 0;
-        max-width: 850px;
+        max-width: 1120px;
         color: var(--muted);
-        font-size: clamp(17px, 1.35vw, 21px);
-        line-height: 1.36;
-        overflow-wrap: anywhere;
-      }
-
-      .demo-badge {
-        align-self: start;
-        min-width: 210px;
-        max-width: 100%;
-        border-left: 4px solid var(--lime);
-        padding: 12px 0 12px 16px;
-        color: var(--green-dark);
-        font-size: 16px;
-        font-weight: 750;
-        line-height: 1.35;
+        font-size: clamp(16px, 1.24vw, 20px);
+        line-height: 1.45;
         overflow-wrap: anywhere;
       }
 
@@ -122,275 +106,454 @@
         min-width: 0;
       }
 
-      .flow {
+      .cycle-layout {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 16px;
+        grid-template-columns: minmax(0, 1.22fr) minmax(280px, 0.58fr);
+        gap: 18px;
         align-items: stretch;
-        position: relative;
         min-width: 0;
       }
 
-      .step {
+      .cycle-stage {
         position: relative;
-        display: grid;
-        grid-template-rows: auto auto 1fr auto;
-        gap: 10px;
-        min-height: 246px;
+        min-height: 520px;
         min-width: 0;
-        background: var(--paper);
         border: 1px solid var(--line);
         border-radius: 8px;
-        padding: 18px;
+        background:
+          radial-gradient(circle at center, rgba(0, 128, 96, 0.08), transparent 36%),
+          rgba(255, 255, 255, 0.8);
+        overflow: hidden;
       }
 
-      .step:not(:last-child)::after {
-        content: "";
+      .cycle-line {
+        position: absolute;
+        inset: 20px 26px;
+        width: calc(100% - 52px);
+        height: calc(100% - 40px);
+        pointer-events: none;
+      }
+
+      .cycle-line path {
+        fill: none;
+        stroke: rgba(0, 76, 63, 0.32);
+        stroke-width: 3;
+        stroke-dasharray: 8 10;
+      }
+
+      .agent-hub {
         position: absolute;
         top: 50%;
-        right: -16px;
-        width: 22px;
-        height: 22px;
-        border-top: 3px solid var(--green);
-        border-right: 3px solid var(--green);
-        transform: translateY(-50%) rotate(45deg);
-        background: var(--paper);
-        z-index: 2;
+        left: 50%;
+        width: min(310px, 32%);
+        min-height: 150px;
+        transform: translate(-50%, -50%);
+        display: grid;
+        place-items: center;
+        gap: 8px;
+        border: 2px solid rgba(0, 128, 96, 0.32);
+        border-radius: 8px;
+        background: #f9fffb;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 18px 45px rgba(20, 32, 26, 0.12);
       }
 
-      .step-number {
-        width: 40px;
-        height: 40px;
+      .agent-hub strong {
+        color: var(--green-dark);
+        font-size: clamp(22px, 1.9vw, 31px);
+        line-height: 1.08;
+      }
+
+      .agent-hub span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.36;
+      }
+
+      .cycle-card {
+        position: absolute;
+        width: min(270px, 31%);
+        min-height: 126px;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        padding: 15px;
+        box-shadow: 0 12px 28px rgba(20, 32, 26, 0.08);
+      }
+
+      .cycle-card:nth-of-type(odd) {
+        border-top: 5px solid var(--green);
+      }
+
+      .cycle-card:nth-of-type(even) {
+        border-top: 5px solid var(--blue);
+      }
+
+      .cycle-number {
+        width: 36px;
+        height: 36px;
         display: grid;
         place-items: center;
         border-radius: 50%;
         background: var(--green-dark);
         color: white;
-        font-size: 18px;
+        font-size: 17px;
         font-weight: 850;
       }
 
-      .step h2 {
-        margin: 0;
-        color: var(--ink);
-        font-size: clamp(19px, 1.55vw, 25px);
-        line-height: 1.08;
+      .cycle-card:nth-of-type(even) .cycle-number {
+        background: var(--blue-dark);
+      }
+
+      .cycle-card h2 {
+        margin: 0 0 6px;
+        font-size: clamp(17px, 1.28vw, 22px);
+        line-height: 1.12;
         letter-spacing: 0;
         overflow-wrap: anywhere;
       }
 
-      .step p {
+      .cycle-card p {
         margin: 0;
-        color: var(--muted);
-        font-size: clamp(14px, 1vw, 16px);
-        line-height: 1.36;
-        overflow-wrap: anywhere;
-      }
-
-      .chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        align-content: end;
-      }
-
-      .chip {
-        border-radius: 999px;
-        padding: 6px 10px;
-        color: var(--green-dark);
-        background: var(--soft-green);
-        font-size: 12px;
-        font-weight: 750;
-        white-space: nowrap;
-      }
-
-      .step:nth-child(2) .chip,
-      .step:nth-child(4) .chip {
-        color: #254b69;
-        background: var(--soft-blue);
-      }
-
-      .step:nth-child(5) .chip {
-        color: #735000;
-        background: var(--soft-amber);
-      }
-
-      .comparison {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
-        align-items: stretch;
-      }
-
-      .path {
-        display: grid;
-        grid-template-rows: auto auto 1fr;
-        gap: 14px;
-        min-width: 0;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--paper);
-        padding: 22px;
-      }
-
-      .path.web {
-        border-top: 6px solid var(--amber);
-      }
-
-      .path.ucp {
-        border-top: 6px solid var(--green);
-      }
-
-      .path-label {
         color: var(--muted);
         font-size: 13px;
-        font-weight: 850;
-        letter-spacing: 0;
-        text-transform: uppercase;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
       }
 
-      .path h2 {
-        margin: 0;
-        font-size: clamp(26px, 2.4vw, 38px);
-        line-height: 1.02;
-        letter-spacing: 0;
+      .cycle-card.one {
+        top: 18px;
+        left: 50%;
+        transform: translateX(-50%);
       }
 
-      .path p {
-        margin: 0;
-        color: var(--muted);
-        font-size: clamp(16px, 1.25vw, 20px);
-        line-height: 1.36;
+      .cycle-card.two {
+        top: 126px;
+        right: 24px;
       }
 
-      .path-flow {
-        display: grid;
-        gap: 10px;
-        align-content: start;
+      .cycle-card.three {
+        right: 150px;
+        bottom: 18px;
       }
 
-      .path-node {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 12px;
-        align-items: start;
-        padding: 12px;
-        border-radius: 8px;
-        background: #f7faf8;
+      .cycle-card.four {
+        left: 150px;
+        bottom: 18px;
       }
 
-      .node-mark {
-        width: 34px;
-        height: 34px;
-        display: grid;
-        place-items: center;
-        border-radius: 50%;
-        background: var(--soft-amber);
-        color: #735000;
-        font-weight: 900;
+      .cycle-card.five {
+        top: 126px;
+        left: 24px;
       }
 
-      .ucp .node-mark {
+      .loop-caption {
+        position: absolute;
+        right: 24px;
+        bottom: 170px;
+        max-width: 240px;
+        color: var(--green-dark);
+        font-size: 13px;
+        font-weight: 760;
+        line-height: 1.35;
+      }
+
+      .loop-caption::before {
+        content: "繰り返し";
+        display: inline-block;
+        margin-right: 8px;
+        border-radius: 999px;
+        padding: 5px 9px;
         background: var(--soft-green);
         color: var(--green-dark);
+        font-size: 12px;
       }
 
-      .path-node strong {
-        display: block;
-        margin-bottom: 3px;
-        font-size: 16px;
-        line-height: 1.2;
-      }
-
-      .path-node span {
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.32;
-      }
-
-      .impact-row {
+      .side-panel {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 14px;
-      }
-
-      .impact {
-        min-width: 0;
-        border-radius: 8px;
-        padding: 16px;
-        background: rgba(255, 255, 255, 0.86);
-        border: 1px solid var(--line);
-      }
-
-      .impact strong {
-        display: block;
-        margin-bottom: 6px;
-        color: var(--green-dark);
-        font-size: 17px;
-        line-height: 1.15;
-      }
-
-      .impact span {
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.34;
-      }
-
-      .bridge {
-        display: grid;
-        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-        gap: 16px;
-        align-items: stretch;
         min-width: 0;
       }
 
       .lane {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 16px;
-        align-items: center;
         min-width: 0;
         border: 1px solid var(--line);
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.82);
-        padding: 14px 18px;
+        background: rgba(255, 255, 255, 0.86);
+        padding: 18px;
       }
 
-      .lane-mark {
-        width: 52px;
-        height: 52px;
-        display: grid;
-        place-items: center;
-        border-radius: 8px;
-        background: var(--soft-green);
+      .lane strong {
+        display: block;
+        margin-bottom: 8px;
         color: var(--green-dark);
-        font-size: 28px;
-        font-weight: 900;
-      }
-
-      .lane:nth-child(2) .lane-mark {
-        background: var(--soft-amber);
-        color: #735000;
-      }
-
-      .lane h3 {
-        margin: 0 0 6px;
-        font-size: clamp(19px, 1.45vw, 23px);
-        line-height: 1.1;
-        overflow-wrap: anywhere;
+        font-size: clamp(20px, 1.55vw, 26px);
+        line-height: 1.12;
       }
 
       .lane p {
         margin: 0;
         color: var(--muted);
         font-size: clamp(14px, 1vw, 16px);
+        line-height: 1.45;
+      }
+
+      .lane.checkout {
+        border-left: 6px solid var(--amber);
+      }
+
+      .lane.catalog {
+        border-left: 6px solid var(--green);
+      }
+
+      .market-map {
+        display: grid;
+        grid-template-columns: minmax(210px, 0.62fr) minmax(0, 1.34fr) minmax(240px, 0.72fr);
+        gap: 16px;
+        align-items: stretch;
+        min-width: 0;
+      }
+
+      .zone,
+      .agent-box,
+      .conversion-box {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.86);
+        padding: 18px;
+      }
+
+      .zone {
+        display: grid;
+        align-content: center;
+        gap: 14px;
+        background: linear-gradient(180deg, #fff9ef, rgba(255, 255, 255, 0.9));
+        border-top: 6px solid var(--amber);
+      }
+
+      .agent-box {
+        display: grid;
+        gap: 16px;
+        background: linear-gradient(180deg, #f8fffa, rgba(255, 255, 255, 0.92));
+        border: 2px solid rgba(0, 128, 96, 0.28);
+      }
+
+      .conversion-box {
+        display: grid;
+        align-content: center;
+        gap: 14px;
+        background: linear-gradient(180deg, #f7fbff, rgba(255, 255, 255, 0.92));
+        border-top: 6px solid var(--blue);
+      }
+
+      .map-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .zone h2,
+      .conversion-box h2 {
+        margin: 0;
+        font-size: clamp(22px, 1.9vw, 32px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .zone p,
+      .conversion-box p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .pill-stack {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 7px 10px;
+        color: var(--amber-dark);
+        background: var(--soft-amber);
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .buyer-agent {
+        display: grid;
+        grid-template-columns: minmax(135px, 0.6fr) auto minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+      }
+
+      .actor {
+        border-radius: 8px;
+        padding: 14px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+      }
+
+      .actor strong {
+        display: block;
+        color: var(--green-dark);
+        font-size: 18px;
+        line-height: 1.15;
+      }
+
+      .actor span {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.36;
+      }
+
+      .agent-node {
+        background: var(--soft-green);
+        border-color: rgba(0, 128, 96, 0.22);
+      }
+
+      .arrow {
+        color: var(--green-dark);
+        font-size: 28px;
+        font-weight: 900;
+        text-align: center;
+      }
+
+      .route-split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .route {
+        display: grid;
+        gap: 10px;
+        min-width: 0;
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+      }
+
+      .route.without {
+        border-top: 6px solid var(--amber);
+      }
+
+      .route.with {
+        border-top: 6px solid var(--green);
+      }
+
+      .route h2 {
+        margin: 0;
+        font-size: clamp(21px, 1.7vw, 29px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .route p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .route-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .route-item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 9px;
+        align-items: start;
+        border-radius: 8px;
+        padding: 9px;
+        background: #f7faf8;
+      }
+
+      .route-mark {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--soft-amber);
+        color: var(--amber-dark);
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .with .route-mark {
+        background: var(--soft-green);
+        color: var(--green-dark);
+      }
+
+      .route-item span {
+        color: var(--muted);
+        font-size: 13px;
         line-height: 1.38;
-        overflow-wrap: anywhere;
+      }
+
+      .conversion-step {
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+      }
+
+      .conversion-step strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--blue-dark);
+        font-size: 16px;
+        line-height: 1.2;
+      }
+
+      .shift-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        gap: 14px;
+        align-items: center;
+      }
+
+      .shift-card {
+        border-radius: 8px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.86);
+      }
+
+      .shift-card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--green-dark);
+        font-size: 18px;
+      }
+
+      .shift-card span {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.42;
       }
 
       footer {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: 20px;
         align-items: center;
         padding-top: 8px;
@@ -407,333 +570,338 @@
         color: var(--green-dark);
         font-weight: 750;
         text-decoration: none;
+        white-space: nowrap;
       }
 
       footer a:hover {
         text-decoration: underline;
       }
 
-      .source-links {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 12px;
-      }
-
-      @media (max-width: 1080px) {
-        .page {
-          padding: 16px;
-        }
-
-        .slide {
-          min-height: auto;
-        }
-
-        header,
-        .bridge,
-        .comparison,
-        .impact-row,
+      @media (max-width: 1180px) {
+        .cycle-layout,
+        .market-map,
         footer {
           grid-template-columns: 1fr;
         }
 
-        .flow {
-          grid-template-columns: 1fr;
+        .cycle-stage {
+          min-height: 720px;
         }
 
-        .step {
+        .cycle-line {
+          display: none;
+        }
+
+        .cycle-card,
+        .agent-hub,
+        .loop-caption {
+          position: static;
+          width: auto;
           min-height: auto;
+          transform: none;
         }
 
-        .step:not(:last-child)::after {
-          top: auto;
-          right: 50%;
-          bottom: -14px;
-          transform: translateX(50%) rotate(135deg);
+        .cycle-stage {
+          display: grid;
+          gap: 12px;
+          padding: 16px;
         }
 
-        .source-links {
-          justify-content: flex-start;
+        .agent-hub {
+          order: 1;
+        }
+
+        .cycle-card.one {
+          order: 2;
+          transform: none;
+        }
+
+        .cycle-card.two {
+          order: 3;
+        }
+
+        .cycle-card.three {
+          order: 4;
+        }
+
+        .cycle-card.four {
+          order: 5;
+        }
+
+        .cycle-card.five {
+          order: 6;
+        }
+
+        .loop-caption {
+          order: 7;
+          max-width: none;
         }
       }
 
-      @media (max-width: 640px) {
+      @media (max-width: 760px) {
         html,
         body {
-          width: 390px;
-          max-width: 100vw;
+          max-width: 100%;
+          overflow-x: hidden;
         }
 
         .page {
           display: block;
-          width: 390px;
-          max-width: 100vw;
           padding: 12px;
         }
 
         .slide {
-          width: 100%;
+          min-height: auto;
+          overflow: hidden;
           padding: 20px;
         }
 
         h1 {
-          font-size: 34px;
-          line-height: 1;
+          font-size: 11px;
         }
 
-        .subtitle,
-        .demo-badge {
-          font-size: 15px;
+        .eyebrow {
+          font-size: 12px;
         }
 
-        .step,
-        .lane {
-          padding: 18px;
+        .buyer-agent,
+        .route-split,
+        .shift-row {
+          grid-template-columns: 1fr;
+        }
+
+        .arrow {
+          transform: rotate(90deg);
         }
       }
     </style>
   </head>
   <body>
     <main>
-      <section class="page">
+      <section class="page" id="journey">
         <section class="slide" aria-labelledby="page-title">
-        <header>
-          <div>
+          <header>
             <p class="eyebrow">Universal Commerce Protocol overview</p>
             <h1 id="page-title">チャットの相談がチェックアウトになるまで</h1>
             <p class="subtitle">
-              UCPは、AIエージェントとマーチャントが共通の方法で商品を見つけ、
-              カートを準備し、支払い・確認が必要な場面では信頼できるチェックアウトへ
-              購入者を案内できるようにします。
+              購入者は一直線に進むのではなく、AIと会話しながら、検索、比較、
+              条件変更、カート、チェックアウト準備を何度も行き来します。
             </p>
-          </div>
-          <div class="demo-badge">
-            このリポジトリのdocsをもとにしたプレゼン用サマリー
-          </div>
-        </header>
+          </header>
 
-        <section class="main-grid" aria-label="Simplified UCP flow">
-          <div class="flow">
-            <article class="step">
-              <div class="step-number">1</div>
-              <h2>購入者がAIに相談する</h2>
-              <p>
-                商品カテゴリ、好み、予算、サイズ、色、配送先、商品画像などを
-                自然な言葉で伝えます。
-              </p>
-              <div class="chip-row">
-                <span class="chip">意図</span>
-                <span class="chip">配送先</span>
-                <span class="chip">好み</span>
+          <section class="main-grid" aria-label="Simplified UCP loop">
+            <div class="cycle-layout">
+              <div class="cycle-stage" aria-label="Buyer and AI agent loop">
+                <svg class="cycle-line" viewBox="0 0 900 520" aria-hidden="true">
+                  <defs>
+                    <marker
+                      id="loop-arrow"
+                      markerHeight="8"
+                      markerWidth="8"
+                      orient="auto"
+                      refX="7"
+                      refY="4"
+                    >
+                      <path d="M0,0 L8,4 L0,8 Z" fill="#008060"></path>
+                    </marker>
+                  </defs>
+                  <path
+                    d="M450 58 C700 58 845 178 790 314 C735 453 505 465 450 432 C200 432 55 318 110 188 C164 62 405 55 450 58"
+                    marker-end="url(#loop-arrow)"
+                  ></path>
+                </svg>
+
+                <div class="agent-hub">
+                  <strong>AI Agentとの会話</strong>
+                  <span>会話のたびに、検索、詳細取得、カート更新、チェックアウト処理のtool呼び出しが起きます。</span>
+                </div>
+
+                <article class="cycle-card one">
+                  <div class="cycle-number">1</div>
+                  <div>
+                    <h2>購入者がAIに相談</h2>
+                    <p>目的、予算、好み、配送先、画像などのシグナルが会話に入ります。</p>
+                  </div>
+                </article>
+
+                <article class="cycle-card two">
+                  <div class="cycle-number">2</div>
+                  <div>
+                    <h2>Agentがtoolを呼ぶ</h2>
+                    <p>MCPコネクターが会話の文脈をUCP向けのリクエストに変換します。</p>
+                  </div>
+                </article>
+
+                <article class="cycle-card three">
+                  <div class="cycle-number">3</div>
+                  <div>
+                    <h2>Catalogが候補を返す</h2>
+                    <p>商品、画像、価格、バリアント、マーチャント情報がデータとして返ります。</p>
+                  </div>
+                </article>
+
+                <article class="cycle-card four">
+                  <div class="cycle-number">4</div>
+                  <div>
+                    <h2>カートやチェックアウトを更新</h2>
+                    <p>商品、購入者情報、合計金額、次に必要な状態を準備します。</p>
+                  </div>
+                </article>
+
+                <article class="cycle-card five">
+                  <div class="cycle-number">5</div>
+                  <div>
+                    <h2>購入者が確認または再相談</h2>
+                    <p>承認、条件変更、別商品の比較などにより、再び1へ戻ります。</p>
+                  </div>
+                </article>
+
+                <div class="loop-caption">
+                  購入準備が整うまで、5から1へ何度も戻る。
+                </div>
               </div>
-            </article>
 
-            <article class="step">
-              <div class="step-number">2</div>
-              <h2>AIがデモコネクターを使う</h2>
-              <p>
-                このMCPサーバーが、会話の内容をUCP向けの商品検索や
-                チェックアウト準備のリクエストに変換します。
-              </p>
-              <div class="chip-row">
-                <span class="chip">MCP</span>
-                <span class="chip">UCP profile</span>
-                <span class="chip">安全なtool呼び出し</span>
+              <div class="side-panel">
+                <article class="lane catalog">
+                  <strong>Catalogは「何を買うべきか」に答える</strong>
+                  <p>
+                    AgentはShopify上のマーチャントを横断して検索し、配送先に合う商品や
+                    バリアントを、購入者が複数のストアを巡回する前に提示できます。
+                  </p>
+                </article>
+
+                <article class="lane checkout">
+                  <strong>Checkoutは「どこで安全に支払うか」に答える</strong>
+                  <p>
+                    チェックアウトのルールと決済の信頼はマーチャント側に残ります。
+                    Agentは入力補助を行い、確認や支払いが必要な時点で安全に引き継ぎます。
+                  </p>
+                </article>
               </div>
-            </article>
+            </div>
+          </section>
 
-            <article class="step">
-              <div class="step-number">3</div>
-              <h2>Shopify Catalogが候補を返す</h2>
-              <p>
-                Catalogは、購入者の条件に合う商品、画像、価格、バリアント、
-                配送可能なショップを返します。
-              </p>
-              <div class="chip-row">
-                <span class="chip">商品</span>
-                <span class="chip">バリアント</span>
-                <span class="chip">在庫</span>
-              </div>
-            </article>
-
-            <article class="step">
-              <div class="step-number">4</div>
-              <h2>カートまたはチェックアウトを準備する</h2>
-              <p>
-                購入者が選ぶと、マーチャント側のUCP endpointがカート、
-                合計、住所項目、次のチェックアウト状態を準備します。
-              </p>
-              <div class="chip-row">
-                <span class="chip">カート</span>
-                <span class="chip">購入者情報</span>
-                <span class="chip">状態</span>
-              </div>
-            </article>
-
-            <article class="step">
-              <div class="step-number">5</div>
-              <h2>購入者が信頼できる画面で完了する</h2>
-              <p>
-                支払い・確認が必要な場合、UCPはcontinue URLを返し、
-                購入者はShopify-hosted checkoutで購入を完了します。
-              </p>
-              <div class="chip-row">
-                <span class="chip">continue URL</span>
-                <span class="chip">支払い</span>
-                <span class="chip">注文</span>
-              </div>
-            </article>
-          </div>
-
-          <div class="bridge" aria-label="Key idea">
-            <article class="lane">
-              <div class="lane-mark">C</div>
-              <div>
-                <h3>Catalogは「何を買うべきか」に答える</h3>
-                <p>
-                  AIはShopifyマーチャントの商品を横断検索し、配送先で絞り込み、
-                  購入者を複数のストアへ移動させずに商品詳細を提示できます。
-                </p>
-              </div>
-            </article>
-
-            <article class="lane">
-              <div class="lane-mark">→</div>
-              <div>
-                <h3>Checkoutは「どこで安全に支払うか」に答える</h3>
-                <p>
-                  チェックアウトのルールはマーチャントが管理します。AIは入力補助と
-                  説明を行い、必要な場面で信頼できる支払い画面へ案内します。
-                </p>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <footer>
-          <div>
-            <strong>要点:</strong> UCPは、商品情報・チェックアウト方針・支払いの信頼を
-            マーチャント側に保ったまま、AIが買い物体験を支援できるようにします。
-          </div>
-          <nav class="source-links" aria-label="Source documents">
-            <a href="sequence-diagram.md">sequence source</a>
-            <a href="escalation.md">escalation source</a>
-            <a href="tips.md">implementation tips</a>
-          </nav>
-        </footer>
+          <footer>
+            <div>
+              <strong>要点:</strong> UCPは、商品情報、チェックアウト方針、決済の信頼を
+              マーチャント側に保ったまま、AIとの購買会話を反復型のコマース体験にします。
+            </div>
+            <a href="index.html">English version</a>
+          </footer>
         </section>
       </section>
 
       <section class="page" id="comparison">
         <section class="slide" aria-labelledby="comparison-title">
-        <header>
-          <div>
+          <header>
             <p class="eyebrow">ウェブ検索 vs UCP検索</p>
             <h1 id="comparison-title">CatalogでAIの商品発見はどう変わるか</h1>
             <p class="subtitle">
-              UCPがない場合、AIは主に検索インデックス越しにウェブを見ます。
-              Shopify Catalogがあると、AIはコマースAPIを直接呼び、
-              商品情報と次に取るべき購入アクションを受け取れます。
+              AI Agentを使う購入者は、従来の検索とは違う意思決定空間に入ります。
+              AgentはSEO中心のウェブ検索に戻ることも、UCPで商品情報と購入アクションを
+              直接読むこともできます。
             </p>
-          </div>
-          <div class="demo-badge">
-            要点: 商品発見とチェックアウトが推測ではなく構造化される
-          </div>
-        </header>
+          </header>
 
-        <section class="main-grid" aria-label="Web search versus UCP search">
-          <div class="comparison">
-            <article class="path web">
-              <div class="path-label">UCPがない場合</div>
-              <h2>AIはクロール済みのウェブを検索する</h2>
-              <p>
-                AIが相手にするのは検索エンジンが事前にクロールしたページで、
-                商品情報はウェブページから推測する必要があります。
-              </p>
-              <div class="path-flow">
-                <div class="path-node">
-                  <div class="node-mark">1</div>
-                  <div>
-                    <strong>検索インデックスが入口</strong>
-                    <span>結果は過去にクロールされたページで、現在のストア状態とは限りません。</span>
-                  </div>
+          <section class="main-grid" aria-label="Buyer, agent, and commerce paths">
+            <div class="market-map">
+              <article class="zone">
+                <div class="map-label">Agentの外側</div>
+                <h2>検索の世界</h2>
+                <p>
+                  購入者がAIとの購買会話に入る前は、SEO、広告、クロール済みページが
+                  露出に大きく影響します。
+                </p>
+                <div class="pill-stack" aria-label="Search world signals">
+                  <span class="pill">SEO</span>
+                  <span class="pill">広告</span>
+                  <span class="pill">クロール済みページ</span>
+                  <span class="pill">露出への投資</span>
                 </div>
-                <div class="path-node">
-                  <div class="node-mark">2</div>
-                  <div>
-                    <strong>ストア単独対応だけでは不十分</strong>
-                    <span>AIがそのストアを直接開いたときだけ、UCP profileを見に行く可能性があります。</span>
-                  </div>
-                </div>
-                <div class="path-node">
-                  <div class="node-mark">3</div>
-                  <div>
-                    <strong>購入アクションが不明確</strong>
-                    <span>カート追加や個人情報を渡すチェックアウト手順は、機械可読に見えにくいです。</span>
-                  </div>
-                </div>
-              </div>
-            </article>
+              </article>
 
-            <article class="path ucp">
-              <div class="path-label">Shopify Catalog + UCPの場合</div>
-              <h2>AIはコマースを直接呼び出す</h2>
-              <p>
-                AIは検索結果をスクレイピングする代わりにCatalogを検索し、
-                商品データと次に実行できる手順を受け取ります。
-              </p>
-              <div class="path-flow">
-                <div class="path-node">
-                  <div class="node-mark">1</div>
-                  <div>
-                    <strong>Catalog APIが入口</strong>
-                    <span>商品、バリアント、画像、価格、在庫、配送条件を直接返せます。</span>
+              <section class="agent-box" aria-label="AI agent branch">
+                <div class="buyer-agent">
+                  <div class="actor">
+                    <strong>購入者</strong>
+                    <span>自然言語で相談し、比較し、条件を変えながら意思決定します。</span>
+                  </div>
+                  <div class="arrow" aria-hidden="true">→</div>
+                  <div class="actor agent-node">
+                    <strong>AI Agentとの会話</strong>
+                    <span>推薦ループの内側では広告の影響が弱まり、tool呼び出しの質が重要になります。</span>
                   </div>
                 </div>
-                <div class="path-node">
-                  <div class="node-mark">2</div>
-                  <div>
-                    <strong>AIに選ばれやすくなる</strong>
-                    <span>ウェブ検索では見えにくい在庫や配送可否が、AIにとって使える情報になります。</span>
-                  </div>
-                </div>
-                <div class="path-node">
-                  <div class="node-mark">3</div>
-                  <div>
-                    <strong>次のアクションが明示される</strong>
-                    <span>Catalog、cart、checkoutの応答が、AIが次に安全にできることを伝えます。</span>
-                  </div>
-                </div>
-              </div>
-            </article>
-          </div>
 
-          <div class="impact-row" aria-label="Why this matters">
-            <article class="impact">
-              <strong>より新しい商品情報</strong>
-              <span>検索スニペットやクロール済みページでは古くなりがちな商品情報を返せます。</span>
-            </article>
-            <article class="impact">
-              <strong>AIの選択精度向上</strong>
-              <span>在庫、バリアント、配送先適合性により、AIは推測を減らして提案できます。</span>
-            </article>
-            <article class="impact">
-              <strong>購入までの行動が明確</strong>
-              <span>ボタンを推測して探すのではなく、カート、チェックアウト、handoffの手順が示されます。</span>
-            </article>
-          </div>
-        </section>
+                <div class="route-split">
+                  <article class="route without">
+                    <div class="map-label">Without UCP</div>
+                    <h2>Agentはウェブを検索する</h2>
+                    <p>商品発見は検索インデックスとページ解析に依存します。</p>
+                    <div class="route-list">
+                      <div class="route-item">
+                        <div class="route-mark">1</div>
+                        <span>商品情報は古かったり、人間向けページの中に隠れていたりします。</span>
+                      </div>
+                      <div class="route-item">
+                        <div class="route-mark">2</div>
+                        <span>カート追加やチェックアウトの手順は、ページUIから推測する必要があります。</span>
+                      </div>
+                    </div>
+                  </article>
 
-        <footer>
-          <div>
-            <strong>要点:</strong> ウェブ検索はページを見つけるもの。
-            UCPは商品と次のコマースアクションをAIに渡すものです。
-          </div>
-          <nav class="source-links" aria-label="Source documents">
-            <a href="tips.md#web-search-vs-ucp-search">tips source</a>
-            <a href="index.html">English version</a>
-          </nav>
-        </footer>
+                  <article class="route with">
+                    <div class="map-label">With UCP</div>
+                    <h2>Agentはコマースを直接呼ぶ</h2>
+                    <p>Catalog、cart、checkoutのデータをAgentが読める形で受け取ります。</p>
+                    <div class="route-list">
+                      <div class="route-item">
+                        <div class="route-mark">1</div>
+                        <span>商品、バリアント、画像、在庫、配送適合性、価格が構造化されます。</span>
+                      </div>
+                      <div class="route-item">
+                        <div class="route-mark">2</div>
+                        <span>カート追加とチェックアウトへの引き継ぎが、次のアクションとして明示されます。</span>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <article class="conversion-box">
+                <div class="map-label">ジャーニー後半</div>
+                <h2>競争の場所はコンバージョンへ</h2>
+                <div class="conversion-step">
+                  <strong>カート追加が増える</strong>
+                  <p>データが実行可能であれば、Agentは選ばれたバリアントを購入に近づけられます。</p>
+                </div>
+                <div class="conversion-step">
+                  <strong>チェックアウト施策が重要になる</strong>
+                  <p>安心感、配送、決済の信頼、引き継ぎ品質が競争力になります。</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="shift-row" aria-label="Investment shift">
+              <article class="shift-card">
+                <strong>これまで: 露出にコストをかける</strong>
+                <span>大手ブランドは広告や検索でリーチを獲得し、人間に商品を発見させていました。</span>
+              </article>
+              <div class="arrow" aria-hidden="true">→</div>
+              <article class="shift-card">
+                <strong>これから: AIに選ばれ、購入完了へ導く</strong>
+                <span>構造化データとチェックアウト準備により、Agentが推薦、カート追加、購入完了を支援できます。</span>
+              </article>
+            </div>
+          </section>
+
+          <footer>
+            <div>
+              <strong>要点:</strong> 競争は、人間に見つけてもらうことから、
+              AIに選ばれ、信頼できるチェックアウトまで導くことへ移ります。
+            </div>
+            <a href="index.html#comparison">English version</a>
+          </footer>
         </section>
       </section>
     </main>

@@ -218,7 +218,7 @@ const response = await fetch(CATALOG_MCP_URL, {
 });
 ```
 
-## 10. Web Search vs UCP Search (ウェブ検索 vs UCP検索)
+## 10. Web Search vs UCP Search
 
 Without UCP, AI product discovery usually starts with web search or web
 scraping. The agent meets pages that a search engine already crawled, so product
@@ -239,23 +239,48 @@ which buyer information is required, or when to hand the buyer to checkout. UCP
 responses can describe cart, checkout, status, and `continue_url` handoff steps
 as structured data.
 
+The commercial implication is that the place of competition can move. In the
+human-search era, merchants spent heavily to win discovery through ads, SEO, and
+reach. In the agentic-commerce era, the buyer is inside a conversation where ad
+influence is weaker and the agent needs structured evidence to choose. This
+shifts investment from paying only for exposure toward making products
+machine-readable, easy to add to cart, and trustworthy to complete at checkout.
+
 ```mermaid
 flowchart LR
-    subgraph Web["Web search path"]
-        W1["AI agent"]
-        W2["Search engine index<br/>previously crawled pages"]
-        W3["Store pages<br/>human-readable content"]
-        W4["Agent infers product facts<br/>and guesses next actions"]
-        W1 --> W2 --> W3 --> W4
+    Buyer["Buyer using an AI agent"]
+    Agent["AI Agent conversation<br/>ads have less influence<br/>tool calls shape recommendations"]
+
+    subgraph SearchWorld["Outside the agent: search world"]
+        SEO["SEO, ads, crawled pages<br/>exposure spend"]
     end
 
-    subgraph UCP["Shopify Catalog + UCP path"]
-        U1["AI agent"]
-        U2["Shopify Catalog API<br/>commerce search"]
-        U3["Product facts<br/>variants, images, price, availability"]
-        U4["Action data<br/>cart, checkout, continue_url"]
-        U1 --> U2 --> U3 --> U4
+    subgraph Without["Without UCP"]
+        W1["Web search or scraping"]
+        W2["Product facts inferred from pages"]
+        W3["Cart and checkout actions guessed from UI"]
+        W1 --> W2 --> W3
     end
+
+    subgraph With["With Shopify Catalog + UCP"]
+        U1["Catalog API search"]
+        U2["Structured product facts<br/>variants, images, price, availability"]
+        U3["Action data<br/>cart, checkout, continue_url"]
+        U1 --> U2 --> U3
+    end
+
+    subgraph Later["Later journey"]
+        C1["More add-to-cart opportunities"]
+        C2["Conversion and checkout quality become the battleground"]
+        C1 --> C2
+    end
+
+    SEO -. influences .-> Without
+    Buyer --> Agent
+    Agent --> Without
+    Agent --> With
+    With --> Later
+    Without -. weaker action path .-> Later
 ```
 
 | Question | Web search / scraping | Shopify Catalog + UCP |
@@ -265,6 +290,7 @@ flowchart LR
 | Will store-level UCP support be noticed? | Not guaranteed during broad web search | Catalog and UCP are part of the agent's commerce path |
 | Are variants, inventory, and shipping fit visible? | Often hidden, stale, or hard to infer | Returned as structured product and offer data |
 | Can the AI take the next purchase action? | It has to inspect pages and guess buttons or forms | UCP exposes cart, checkout, status, and handoff steps |
+| Where does investment move? | Toward exposure, SEO, and ad reach | Toward structured data, cart readiness, and checkout conversion |
 
 ## References
 
