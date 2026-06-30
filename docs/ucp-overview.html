@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UCP Demo Overview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7f2;
+        --ink: #14201a;
+        --muted: #536259;
+        --line: #cad8ce;
+        --green: #008060;
+        --green-dark: #004c3f;
+        --lime: #95bf47;
+        --blue: #2f6f9f;
+        --amber: #c77700;
+        --paper: #ffffff;
+        --soft-green: #e6f2ea;
+        --soft-blue: #e8f1f7;
+        --soft-amber: #fbefd9;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow-x: hidden;
+        background:
+          linear-gradient(180deg, rgba(0, 128, 96, 0.08), transparent 34%),
+          var(--bg);
+        color: var(--ink);
+      }
+
+      .page {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+      }
+
+      .slide {
+        width: min(1500px, 100%);
+        min-width: 0;
+        min-height: min(860px, calc(100vh - 32px));
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 16px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(0, 76, 63, 0.16);
+        box-shadow: 0 24px 70px rgba(20, 32, 26, 0.13);
+        padding: clamp(20px, 2.4vw, 36px);
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: end;
+      }
+
+      header > * {
+        min-width: 0;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--green);
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 980px;
+        font-size: clamp(38px, 4.4vw, 64px);
+        line-height: 0.95;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .subtitle {
+        margin: 14px 0 0;
+        max-width: 850px;
+        color: var(--muted);
+        font-size: clamp(17px, 1.35vw, 21px);
+        line-height: 1.36;
+        overflow-wrap: anywhere;
+      }
+
+      .demo-badge {
+        align-self: start;
+        min-width: 210px;
+        max-width: 100%;
+        border-left: 4px solid var(--lime);
+        padding: 12px 0 12px 16px;
+        color: var(--green-dark);
+        font-size: 16px;
+        font-weight: 750;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        align-content: center;
+        min-width: 0;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 16px;
+        align-items: stretch;
+        position: relative;
+        min-width: 0;
+      }
+
+      .step {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 10px;
+        min-height: 246px;
+        min-width: 0;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+      }
+
+      .step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: -16px;
+        width: 22px;
+        height: 22px;
+        border-top: 3px solid var(--green);
+        border-right: 3px solid var(--green);
+        transform: translateY(-50%) rotate(45deg);
+        background: var(--paper);
+        z-index: 2;
+      }
+
+      .step-number {
+        width: 40px;
+        height: 40px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--green-dark);
+        color: white;
+        font-size: 18px;
+        font-weight: 850;
+      }
+
+      .step h2 {
+        margin: 0;
+        color: var(--ink);
+        font-size: clamp(19px, 1.55vw, 25px);
+        line-height: 1.08;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .step p {
+        margin: 0;
+        color: var(--muted);
+        font-size: clamp(14px, 1vw, 16px);
+        line-height: 1.36;
+        overflow-wrap: anywhere;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-content: end;
+      }
+
+      .chip {
+        border-radius: 999px;
+        padding: 6px 10px;
+        color: var(--green-dark);
+        background: var(--soft-green);
+        font-size: 12px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .step:nth-child(2) .chip,
+      .step:nth-child(4) .chip {
+        color: #254b69;
+        background: var(--soft-blue);
+      }
+
+      .step:nth-child(5) .chip {
+        color: #735000;
+        background: var(--soft-amber);
+      }
+
+      .bridge {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 16px;
+        align-items: stretch;
+        min-width: 0;
+      }
+
+      .lane {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 16px;
+        align-items: center;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.82);
+        padding: 14px 18px;
+      }
+
+      .lane-mark {
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        background: var(--soft-green);
+        color: var(--green-dark);
+        font-size: 28px;
+        font-weight: 900;
+      }
+
+      .lane:nth-child(2) .lane-mark {
+        background: var(--soft-amber);
+        color: #735000;
+      }
+
+      .lane h3 {
+        margin: 0 0 6px;
+        font-size: clamp(19px, 1.45vw, 23px);
+        line-height: 1.1;
+        overflow-wrap: anywhere;
+      }
+
+      .lane p {
+        margin: 0;
+        color: var(--muted);
+        font-size: clamp(14px, 1vw, 16px);
+        line-height: 1.38;
+        overflow-wrap: anywhere;
+      }
+
+      footer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      footer strong {
+        color: var(--green-dark);
+      }
+
+      footer a {
+        color: var(--green-dark);
+        font-weight: 750;
+        text-decoration: none;
+      }
+
+      footer a:hover {
+        text-decoration: underline;
+      }
+
+      .source-links {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
+      @media (max-width: 1080px) {
+        .page {
+          padding: 16px;
+        }
+
+        .slide {
+          min-height: auto;
+        }
+
+        header,
+        .bridge,
+        footer {
+          grid-template-columns: 1fr;
+        }
+
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        .step {
+          min-height: auto;
+        }
+
+        .step:not(:last-child)::after {
+          top: auto;
+          right: 50%;
+          bottom: -14px;
+          transform: translateX(50%) rotate(135deg);
+        }
+
+        .source-links {
+          justify-content: flex-start;
+        }
+      }
+
+      @media (max-width: 640px) {
+        html,
+        body {
+          width: 390px;
+          max-width: 100vw;
+        }
+
+        .page {
+          display: block;
+          width: 390px;
+          max-width: 100vw;
+          padding: 12px;
+        }
+
+        .slide {
+          width: 100%;
+          padding: 20px;
+        }
+
+        h1 {
+          font-size: 34px;
+          line-height: 1;
+        }
+
+        .subtitle,
+        .demo-badge {
+          font-size: 15px;
+        }
+
+        .step,
+        .lane {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="slide" aria-labelledby="page-title">
+        <header>
+          <div>
+            <p class="eyebrow">Universal Commerce Protocol overview</p>
+            <h1 id="page-title">How a chat request becomes a checkout</h1>
+            <p class="subtitle">
+              UCP gives AI agents and merchants a shared way to discover products,
+              prepare carts, and hand buyers to a trusted checkout when payment or
+              review is needed.
+            </p>
+          </div>
+          <div class="demo-badge">
+            Presentation-ready summary based on this repository's docs
+          </div>
+        </header>
+
+        <section class="main-grid" aria-label="Simplified UCP flow">
+          <div class="flow">
+            <article class="step">
+              <div class="step-number">1</div>
+              <h2>Buyer asks the AI</h2>
+              <p>
+                The request can be plain language: product type, style, budget,
+                size, color, destination, or even a product image.
+              </p>
+              <div class="chip-row">
+                <span class="chip">intent</span>
+                <span class="chip">location</span>
+                <span class="chip">preferences</span>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-number">2</div>
+              <h2>AI uses the demo connector</h2>
+              <p>
+                This MCP server translates the conversation into UCP-ready
+                product search and checkout requests.
+              </p>
+              <div class="chip-row">
+                <span class="chip">MCP</span>
+                <span class="chip">UCP profile</span>
+                <span class="chip">safe tool calls</span>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-number">3</div>
+              <h2>Shopify Catalog finds matches</h2>
+              <p>
+                Catalog returns relevant products, images, prices, variants, and
+                shops that can serve the buyer's destination.
+              </p>
+              <div class="chip-row">
+                <span class="chip">products</span>
+                <span class="chip">variants</span>
+                <span class="chip">availability</span>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-number">4</div>
+              <h2>Cart or checkout is prepared</h2>
+              <p>
+                Once the buyer chooses, the merchant-side UCP endpoint prepares
+                the cart, totals, address fields, and next checkout status.
+              </p>
+              <div class="chip-row">
+                <span class="chip">cart</span>
+                <span class="chip">buyer info</span>
+                <span class="chip">status</span>
+              </div>
+            </article>
+
+            <article class="step">
+              <div class="step-number">5</div>
+              <h2>Buyer finishes with trust</h2>
+              <p>
+                If payment or review is required, UCP returns a continue URL and
+                the buyer completes the purchase in Shopify-hosted checkout.
+              </p>
+              <div class="chip-row">
+                <span class="chip">continue URL</span>
+                <span class="chip">payment</span>
+                <span class="chip">order</span>
+              </div>
+            </article>
+          </div>
+
+          <div class="bridge" aria-label="Key idea">
+            <article class="lane">
+              <div class="lane-mark">C</div>
+              <div>
+                <h3>Catalog answers “what should I buy?”</h3>
+                <p>
+                  The AI can search across Shopify-powered merchants, narrow by
+                  destination, and show product details without sending the buyer
+                  to multiple storefronts.
+                </p>
+              </div>
+            </article>
+
+            <article class="lane">
+              <div class="lane-mark">→</div>
+              <div>
+                <h3>Checkout answers “where do I safely pay?”</h3>
+                <p>
+                  The merchant remains in control of checkout rules. The agent
+                  helps prefill and explain, then hands off when a trusted payment
+                  page is the right next step.
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <footer>
+          <div>
+            <strong>One-line takeaway:</strong> UCP lets the AI assist the shopping
+            journey while the merchant keeps product truth, checkout policy, and
+            payment trust.
+          </div>
+          <nav class="source-links" aria-label="Source documents">
+            <a href="sequence-diagram.md">sequence source</a>
+            <a href="escalation.md">escalation source</a>
+            <a href="tips.md">implementation tips</a>
+          </nav>
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>
