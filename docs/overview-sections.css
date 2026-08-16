@@ -7,6 +7,85 @@ code {
   font-size: 0.9em;
 }
 
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  min-width: 0;
+}
+
+.demo-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(250px, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-top: 6px solid var(--green);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 18px;
+}
+
+.demo-card:nth-child(2) {
+  border-top-color: var(--blue);
+}
+
+.demo-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+
+.demo-label {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--soft-green);
+  padding: 7px 11px;
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.demo-card:nth-child(2) .demo-label {
+  background: var(--soft-blue);
+  color: var(--blue-dark);
+}
+
+.demo-card h2 {
+  margin: 0;
+  color: var(--green-dark);
+  font-size: clamp(22px, 1.8vw, 30px);
+  line-height: 1.08;
+}
+
+.demo-card:nth-child(2) h2 {
+  color: var(--blue-dark);
+}
+
+.demo-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.demo-card video {
+  display: block;
+  width: 100%;
+  height: clamp(390px, 52vh, 560px);
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: #0b1712;
+  object-fit: contain;
+}
+
 .actor-map {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -436,6 +515,14 @@ code {
 }
 
 @media (max-width: 1180px) {
+  .demo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-card {
+    grid-template-columns: minmax(240px, 0.72fr) minmax(360px, 1fr);
+  }
+
   .actor-map {
     grid-template-columns: 1fr;
   }
@@ -476,5 +563,16 @@ code {
   .site-disclaimer {
     width: calc(100% - 24px);
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .demo-card {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-card video {
+    height: min(70vh, 620px);
+    min-height: 420px;
   }
 }
