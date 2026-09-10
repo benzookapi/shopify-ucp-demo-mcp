@@ -1337,8 +1337,102 @@
             </div>
             <nav class="footer-links" aria-label="Lifecycle navigation">
               <a href="#actors">Four actors</a>
-              <a href="#faq">FAQ</a>
+              <a href="#catalog-fields">Catalog fields</a>
               <a href="ja/#lifecycle">Japanese version</a>
+            </nav>
+          </footer>
+        </section>
+      </section>
+
+      <section class="page" id="catalog-fields">
+        <section class="slide" aria-labelledby="catalog-fields-title">
+          <header>
+            <p class="eyebrow">Shopify Catalog field mapping</p>
+            <h1 id="catalog-fields-title">Product data defines values; requests choose results</h1>
+            <p class="subtitle">
+              Merchant data and Catalog mapping determine which values enter Shopify
+              Catalog. A search request then selects and orders products, while the
+              response shape stays fixed by UCP and Shopify's declared extensions.
+            </p>
+          </header>
+
+          <section class="main-grid" aria-label="Shopify Catalog field sources, customization boundaries, and request-response flow">
+            <div class="catalog-diagram-grid">
+              <article class="catalog-diagram-card">
+                <h2>1 · Where response fields come from</h2>
+                <div class="mermaid-shell">
+                  <pre class="mermaid">
+flowchart TB
+  accTitle: Shopify Catalog data sources and field mapping
+  accDescr: Standard Shopify product data and supported mapped custom data enter Shopify Catalog, which returns a fixed UCP response plus Shopify extension fields.
+  subgraph ADMIN["Shopify Admin"]
+    STD["Standard product data&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
+    CUSTOM["Metafields / Metaobjects"]
+    MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalog only&lt;/b&gt;"]
+  end
+  subgraph CATALOG["Shopify Catalog"]
+    ING["Eligibility · normalization&lt;br/&gt;AI enrichment"]
+  end
+  subgraph RESPONSE["Catalog response"]
+    CORE["Base UCP fields&lt;br/&gt;Product · Variant · rating&lt;br/&gt;metadata slot"]
+    EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;inferred metadata"]
+    OUT["Ordered products[]"]
+  end
+  STD -->|"title · description · category&lt;br/&gt;+ variant grouping"| MAP
+  CUSTOM -->|"supported mapped source"| MAP
+  STD -->|"all other standard fields"| ING
+  MAP --> ING
+  ING --> CORE
+  ING --> EXT
+  CORE --> OUT
+  EXT --> OUT
+                  </pre>
+                </div>
+              </article>
+
+              <article class="catalog-diagram-card request-response">
+                <h2>2 · How a request shapes the response</h2>
+                <div class="mermaid-shell">
+                  <pre class="mermaid">
+flowchart TB
+  accTitle: Catalog query and response relationship
+  accDescr: Search query, buyer context, and supported filters select and rank Catalog entries without changing the fixed response schema.
+  REQUEST["Request inputs&lt;br/&gt;&lt;b&gt;query + like (Global)&lt;/b&gt;: intent and similarity&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: country · language · currency · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available; Global also adds ships_to · category · rating"]
+  REQUEST --> SEARCH["search_catalog"]
+  SEARCH --> MATCH["Eligibility + relevance&lt;br/&gt;select and order results&lt;br/&gt;no public sort weights"]
+  MATCH --> PAGE["Ordered page&lt;br/&gt;featured variant and media first"]
+  PAGE --> SHAPE["Fixed response schema&lt;br/&gt;fields may be absent&lt;br/&gt;request does not add fields"]
+                  </pre>
+                </div>
+              </article>
+            </div>
+
+            <div class="catalog-boundaries">
+              <article>
+                <strong>Merchant-controlled</strong>
+                <span>Re-point <code>title</code>, <code>description</code>, and <code>category</code>, and configure custom variant grouping. Arbitrary response fields cannot be added.</span>
+              </article>
+              <article>
+                <strong>Request-controlled</strong>
+                <span><code>query</code>, buyer <code>context</code>, and supported <code>filters</code> change eligibility and relevance—not field definitions or inferred metadata.</span>
+              </article>
+              <article>
+                <strong>Shopify-controlled</strong>
+                <span>Eligibility, normalization, inferred Global Catalog fields, and relevance ranking. The ranking algorithm and its weights are not published.</span>
+              </article>
+            </div>
+          </section>
+
+          <footer>
+            <div>
+              <strong>Boundary:</strong> Catalog mapping changes a merchant's
+              representation in Shopify Catalog; it does not configure Storefront
+              Catalog MCP responses. <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">Read the complete field guide.</a>
+            </div>
+            <nav class="footer-links" aria-label="Catalog field mapping navigation">
+              <a href="#lifecycle">Checkout lifecycle</a>
+              <a href="#faq">FAQ</a>
+              <a href="ja/#catalog-fields">Japanese version</a>
             </nav>
           </footer>
         </section>
@@ -1414,7 +1508,7 @@
               as the detailed source when Shopify surfaces evolve.
             </div>
             <nav class="footer-links" aria-label="FAQ navigation">
-              <a href="#lifecycle">Checkout lifecycle</a>
+              <a href="#catalog-fields">Catalog fields</a>
               <a href="#resources">Technical guides</a>
               <a href="ja/#faq">Japanese version</a>
             </nav>
@@ -1428,7 +1522,7 @@
             <p class="eyebrow">Technical documentation</p>
             <h1 id="resources-title">Choose the guide that matches your next question</h1>
             <p class="subtitle">
-              Start with the README, then use four focused guides to go deeper
+              Start with the README, then use five focused guides to go deeper
               from responsibility boundaries to wire-level testing.
             </p>
           </header>
@@ -1444,6 +1538,17 @@
                   videos.
                 </p>
                 <div class="resource-best-for">Best for: starting here, finding source, setup, and demo videos</div>
+              </article>
+
+              <article class="resource-card catalog-guide">
+                <div class="resource-label">Catalog data and field mapping</div>
+                <h2><a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">catalog-field-mapping.md</a></h2>
+                <p>
+                  Maps Shopify product data to UCP fields, separates Global and
+                  Storefront Catalog behavior, and explains Admin mapping,
+                  inferred metadata, request inputs, result ordering, and custom-data limits.
+                </p>
+                <div class="resource-best-for">Best for: field sources, metadata, query behavior, and customization boundaries</div>
               </article>
 
               <article class="resource-card">
@@ -1496,7 +1601,8 @@
             <div>
               <strong>Start with the question:</strong> Concepts → escalation;
               project, source, and demos → README; runtime flow → sequence;
-              implementation choices → tips; live verification → UCP CLI.
+              Catalog fields → field mapping; implementation choices → tips;
+              live verification → UCP CLI.
             </div>
             <nav class="footer-links" aria-label="Resource navigation">
               <a href="#journey">UCP journey</a>
@@ -1518,5 +1624,45 @@
         <a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/README.md#disclaimer">View in README.</a>
       </p>
     </aside>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          fontFamily: getComputedStyle(document.documentElement).fontFamily,
+          primaryColor: "#e6f2ea",
+          primaryTextColor: "#14201a",
+          primaryBorderColor: "#008060",
+          secondaryColor: "#e8f1f7",
+          tertiaryColor: "#fbefd9",
+          lineColor: "#536259",
+          clusterBkg: "#fbfdfb",
+          clusterBorder: "#cad8ce"
+        },
+        flowchart: {
+          curve: "basis",
+          htmlLabels: true,
+          useMaxWidth: true
+        }
+      });
+
+      async function renderVisibleDiagrams() {
+        await new Promise(requestAnimationFrame);
+        const nodes = [...document.querySelectorAll(".mermaid:not([data-processed='true'])")]
+          .filter((node) => node.offsetParent !== null);
+
+        if (nodes.length > 0) {
+          await mermaid.run({ nodes });
+        }
+      }
+
+      await renderVisibleDiagrams();
+      window.addEventListener("hashchange", () => {
+        void renderVisibleDiagrams();
+      });
+    </script>
   </body>
 </html>

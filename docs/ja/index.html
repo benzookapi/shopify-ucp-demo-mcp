@@ -1327,8 +1327,102 @@
             </div>
             <nav class="footer-links" aria-label="状態遷移のナビゲーション">
               <a href="#actors">4つの主体</a>
-              <a href="#faq">FAQ</a>
+              <a href="#catalog-fields">Catalogのフィールド</a>
               <a href="../index.html#lifecycle">English version</a>
+            </nav>
+          </footer>
+        </section>
+      </section>
+
+      <section class="page" id="catalog-fields">
+        <section class="slide" aria-labelledby="catalog-fields-title">
+          <header>
+            <p class="eyebrow">Shopify Catalogのフィールドマッピング</p>
+            <h1 id="catalog-fields-title">商品データが値を決め、リクエストが表示対象を選ぶ</h1>
+            <p class="subtitle">
+              Merchantの商品データとCatalog mappingが、Shopify Catalogに入る値を決めます。
+              検索リクエストは商品を選択して並べますが、responseの形はUCPと
+              Shopifyが宣言したextensionによって固定されています。
+            </p>
+          </header>
+
+          <section class="main-grid" aria-label="Shopify Catalogのフィールド参照元、カスタマイズ境界、requestとresponseの流れ">
+            <div class="catalog-diagram-grid">
+              <article class="catalog-diagram-card">
+                <h2>1 · responseのフィールドはどこから来るか</h2>
+                <div class="mermaid-shell">
+                  <pre class="mermaid">
+flowchart TB
+  accTitle: Shopify Catalogのデータソースとフィールドマッピング
+  accDescr: Shopifyの標準商品データと、マッピングした対応カスタムデータがShopify Catalogに入り、固定されたUCP responseとShopify extensionのフィールドとして返されます。
+  subgraph ADMIN["Shopify Admin"]
+    STD["標準の商品データ&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
+    CUSTOM["Metafields / Metaobjects"]
+    MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalogのみ&lt;/b&gt;"]
+  end
+  subgraph CATALOG["Shopify Catalog"]
+    ING["掲載要件 · 正規化&lt;br/&gt;AIによる補完"]
+  end
+  subgraph RESPONSE["Catalog response"]
+    CORE["UCP標準フィールド&lt;br/&gt;Product · Variant · rating&lt;br/&gt;metadata slot"]
+    EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;推論metadata"]
+    OUT["順序付けされたproducts[]"]
+  end
+  STD -->|"title · description · category&lt;br/&gt;+ variant grouping"| MAP
+  CUSTOM -->|"対応するマッピング元"| MAP
+  STD -->|"その他の標準フィールド"| ING
+  MAP --> ING
+  ING --> CORE
+  ING --> EXT
+  CORE --> OUT
+  EXT --> OUT
+                  </pre>
+                </div>
+              </article>
+
+              <article class="catalog-diagram-card request-response">
+                <h2>2 · requestがresponseへどう影響するか</h2>
+                <div class="mermaid-shell">
+                  <pre class="mermaid">
+flowchart TB
+  accTitle: Catalogのqueryとresponseの関係
+  accDescr: 検索query、購入者context、対応filterは、固定されたresponse schemaを変えずにCatalogの商品を選択して順位付けします。
+  REQUEST["Request入力&lt;br/&gt;&lt;b&gt;query + like（Global）&lt;/b&gt;: 意図と類似性&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: 国 · 言語 · 通貨 · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available、Globalではさらに ships_to · category · rating"]
+  REQUEST --> SEARCH["search_catalog"]
+  SEARCH --> MATCH["掲載可否 + relevance&lt;br/&gt;結果を選択して順序付け&lt;br/&gt;順位の重みは非公開"]
+  MATCH --> PAGE["順序付けされたpage&lt;br/&gt;最初のvariantとmediaをfeatured表示"]
+  PAGE --> SHAPE["固定されたresponse schema&lt;br/&gt;フィールドは欠ける場合がある&lt;br/&gt;requestからフィールド追加は不可"]
+                  </pre>
+                </div>
+              </article>
+            </div>
+
+            <div class="catalog-boundaries">
+              <article>
+                <strong>Merchantが変更できる範囲</strong>
+                <span><code>title</code>、<code>description</code>、<code>category</code>の参照元と、custom variant groupingを設定できます。任意のresponseフィールドは追加できません。</span>
+              </article>
+              <article>
+                <strong>requestが変更できる範囲</strong>
+                <span><code>query</code>、購入者の<code>context</code>、対応する<code>filters</code>は掲載可否とrelevanceを変えますが、フィールド定義や推論metadataは変えません。</span>
+              </article>
+              <article>
+                <strong>Shopifyが制御する範囲</strong>
+                <span>掲載要件、正規化、Global Catalogの推論フィールド、relevance rankingです。ranking algorithmと重みは公開されていません。</span>
+              </article>
+            </div>
+          </section>
+
+          <footer>
+            <div>
+              <strong>境界:</strong> Catalog mappingはShopify Catalog上の商品表現を
+              変更しますが、Storefront Catalog MCPのresponse設定ではありません。
+              <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">完全なフィールドガイドを見る。</a>
+            </div>
+            <nav class="footer-links" aria-label="Catalogフィールドマッピングのナビゲーション">
+              <a href="#lifecycle">Checkoutの状態</a>
+              <a href="#faq">FAQ</a>
+              <a href="../index.html#catalog-fields">English version</a>
             </nav>
           </footer>
         </section>
@@ -1404,7 +1498,7 @@
               <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/tips.md#faq--common-shopify-agentic-commerce-misconceptions">tips.md</a>を参照してください。
             </div>
             <nav class="footer-links" aria-label="FAQナビゲーション">
-              <a href="#lifecycle">Checkoutの状態</a>
+              <a href="#catalog-fields">Catalogのフィールド</a>
               <a href="#resources">技術資料</a>
               <a href="../index.html#faq">English version</a>
             </nav>
@@ -1418,7 +1512,7 @@
             <p class="eyebrow">技術ドキュメント</p>
             <h1 id="resources-title">次の疑問に合う技術資料を選ぶ</h1>
             <p class="subtitle">
-              まずREADMEで全体を把握し、4つの専門資料で責任分担の概念から
+              まずREADMEで全体を把握し、5つの専門資料で責任分担の概念から
               wire levelのテストまで掘り下げます。リンク先の技術資料は英語です。
             </p>
           </header>
@@ -1433,6 +1527,17 @@
                   Wikiにあるdemo動画へのリンクを案内します。
                 </p>
                 <div class="resource-best-for">用途: 最初の確認、source、setup、demo動画の検索</div>
+              </article>
+
+              <article class="resource-card catalog-guide">
+                <div class="resource-label">Catalogデータとフィールドマッピング</div>
+                <h2><a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">catalog-field-mapping.md</a></h2>
+                <p>
+                  Shopifyの商品データからUCPフィールドへの対応、GlobalとStorefront
+                  Catalogの違い、Admin mapping、推論metadata、request入力、結果の順序、
+                  custom dataの制約を説明します。
+                </p>
+                <div class="resource-best-for">用途: フィールドの参照元、metadata、queryの挙動、カスタマイズ境界</div>
               </article>
 
               <article class="resource-card">
@@ -1480,7 +1585,8 @@
           <footer>
             <div>
               <strong>疑問から選ぶ:</strong> 概念 → escalation、実行フロー → sequence、
-              project・source・demo → README、実装判断 → tips、live検証 → UCP CLI。
+              project・source・demo → README、Catalogフィールド → field mapping、
+              実装判断 → tips、live検証 → UCP CLI。
             </div>
             <nav class="footer-links" aria-label="技術資料ナビゲーション">
               <a href="#journey">UCPジャーニー</a>
@@ -1501,5 +1607,45 @@
         <a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/README.md#disclaimer">READMEで確認する。</a>
       </p>
     </aside>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.12.0/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          fontFamily: getComputedStyle(document.documentElement).fontFamily,
+          primaryColor: "#e6f2ea",
+          primaryTextColor: "#14201a",
+          primaryBorderColor: "#008060",
+          secondaryColor: "#e8f1f7",
+          tertiaryColor: "#fbefd9",
+          lineColor: "#536259",
+          clusterBkg: "#fbfdfb",
+          clusterBorder: "#cad8ce"
+        },
+        flowchart: {
+          curve: "basis",
+          htmlLabels: true,
+          useMaxWidth: true
+        }
+      });
+
+      async function renderVisibleDiagrams() {
+        await new Promise(requestAnimationFrame);
+        const nodes = [...document.querySelectorAll(".mermaid:not([data-processed='true'])")]
+          .filter((node) => node.offsetParent !== null);
+
+        if (nodes.length > 0) {
+          await mermaid.run({ nodes });
+        }
+      }
+
+      await renderVisibleDiagrams();
+      window.addEventListener("hashchange", () => {
+        void renderVisibleDiagrams();
+      });
+    </script>
   </body>
 </html>
