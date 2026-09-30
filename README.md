@@ -125,6 +125,8 @@ For an explanation of UCP escalation — what this sample demos, what it doesn't
 
 For a detailed reference on Shopify Catalog fields — including UCP Product and Variant fields, Shopify extensions and inferred metadata, merchant data-source mapping, metafield limitations, and search-result ordering — see [docs/catalog-field-mapping.md](docs/catalog-field-mapping.md).
 
+Storefront discovery is a separate layer: Dawn and Horizon emit schema.org JSON-LD for organizations, products, and articles, while WebMCP exposes actions in the shopper's browser. Neither is this server's UCP Catalog response format. For built-in theme output, customization boundaries, AEO caveats, and the Google Rich Results Test, see [Storefront JSON-LD, WebMCP, and Catalog](docs/catalog-field-mapping.md#9-storefront-json-ld-webmcp-and-catalog).
+
 For implementation tips on improving search quality, ratings, and checkout handling, see [docs/tips.md](docs/tips.md).
 
 To verify the wire format using Shopify's official [`@shopify/ucp-cli`](https://shopify.dev/docs/agents/get-started/quickstart) — including the spec-named tools (`search_catalog`, `get_product`, `create_checkout`, etc.) that this sample wraps — see [docs/test-with-ucp-cli.md](docs/test-with-ucp-cli.md).

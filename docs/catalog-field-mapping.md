@@ -2,7 +2,7 @@
 
 How merchant product data becomes a UCP Catalog response, how far custom data can travel, how keyword search results are ordered, and which parts of all this Shopify publishes.
 
-Everything below comes from public sources (ucp.dev, shopify.dev, help.shopify.com, community.shopify.dev). Links are collected in [References](#references).
+Everything below comes from public sources: UCP and Shopify documentation, Shopify's developer community and official theme repositories, and Google Search documentation. Sources are linked inline and collected in [References](#references).
 
 > **Verified:** 2026-09-10 · **UCP version:** `2026-08-25`
 > Parts of this area (promoted placements) are in Developer Preview, and Shopify states that endpoint URLs and field shapes can change. Re-check the linked pages before relying on a detail.
@@ -252,7 +252,54 @@ The general shape holds: an app fills a standard slot, it never adds one.
 |---|---|
 | `templates/agents.md.liquid` | `/agents.md` is the canonical agent-discovery document. `/llms.txt` and `/llms-full.txt` mirror it by default unless dedicated templates override them. Store-level context, not Catalog fields. |
 | WebMCP | Tools on Liquid storefronts let an agent search the catalog and manage the cart in the shopper's live browser session, reaching real store content without custom UCP fields. |
+| Storefront JSON-LD | Theme-rendered schema.org descriptions of page content. Useful for search engines and consumers that read structured data; not additional UCP Catalog fields. See [§9](#9-storefront-json-ld-webmcp-and-catalog). |
 | A separate MCP tool of your own | Serve the extra data from your own server over the Admin or Storefront API and expose it as an additional tool next to the Catalog tools. |
+
+---
+
+## 9. Storefront JSON-LD, WebMCP, and Catalog
+
+**Yes, Shopify's Dawn and Horizon themes include JSON-LD by default, but not every schema.org type on every page.** This is theme-rendered storefront markup, not the UCP schema returned by this MCP server.
+
+```mermaid
+flowchart TB
+    DATA["Shopify store data"]
+    DATA --> THEME["Liquid theme rendering"]
+    THEME --> LD["schema.org JSON-LD<br/>Describes page content"]
+    LD --> READ["Search engines / structured-data consumers"]
+    DATA --> WEB["Shopify WebMCP<br/>Storefront API + cart actions"]
+    WEB --> BROWSER["Compatible agent in the shopper's browser<br/>Search · cart · navigation"]
+    DATA --> CAT["Shopify Catalog services"]
+    CAT --> MCP["UCP Catalog over MCP<br/>Fixed response schema"]
+    MCP --> AGENT["Remote AI agent / this demo wrapper"]
+```
+
+These are parallel interfaces, not a JSON-LD → WebMCP → UCP pipeline. Editing theme JSON-LD is not a supported way to override Global Catalog metadata or add UCP fields. Shopify documents WebMCP as automatically provided on Liquid storefronts, with a compatible agent/browser required; that does not mean this remote MCP wrapper runs in the shopper's tab. See [WebMCP tools](https://shopify.dev/docs/api/web-mcp).
+
+### Built-in output in Dawn and Horizon
+
+Checked on 2026-09-30 against the pinned upstream revisions linked below. Installed theme versions, enabled sections, apps, and merchant edits can change the actual output.
+
+| Page / section | schema.org output | Implementation |
+|---|---|---|
+| Pages that render the standard header | `Organization` | Theme JSON-LD with shop name, URL, and logo when configured. Dawn also includes configured social links in `sameAs`. |
+| Homepage, Dawn only in these revisions | `WebSite` with `SearchAction` | Theme JSON-LD for the site's search action. |
+| Product page / configured featured-product section | `Product` or `ProductGroup` | Shopify's `product` `structured_data` Liquid filter; the documented distinction is products without variants vs. with one or more variants. Price, availability, brand, and image data can be included. |
+| Blog article | `Article` | Shopify's `article` `structured_data` Liquid filter. |
+
+The [Liquid filter reference](https://shopify.dev/docs/api/liquid/filters/structured_data) defines the product/article conversion. The [Theme Store requirements](https://shopify.dev/docs/storefronts/themes/store/requirements#11-search-engine-optimization-seo) require product rich-snippet structured data; this is not a guarantee of every schema.org type or of unmodified markup in a live store.
+
+### What may need customization
+
+The inspected theme source does not add `FAQPage`, `BreadcrumbList`, or collection-level `ItemList` / `CollectionPage` JSON-LD. Add relevant markup through a theme customization or an app if needed, keeping it consistent with visible content and avoiding conflicting duplicates.
+
+Do not assume `Review` / `AggregateRating` appears just because a review app stores ratings. The inspected themes do not add their own review JSON-LD, and Shopify staff described automatic `aggregateRating` support in `structured_data` as a feature request in [this 2025 discussion](https://community.shopify.dev/t/structured-data-should-add-support-for-rating/21484). The filter is platform-generated and can evolve: inspect the rendered page before asserting absence or presence. This is separate from the UCP `rating` field discussed in §8.
+
+### AEO and validation
+
+- Dawn's `SearchAction` markup is not a promise of a Google search box: Google [retired that search-result feature on November 21, 2024](https://developers.google.com/search/blog/2024/10/sitelinks-search-box).
+- JSON-LD does not guarantee AI recommendations or rich results. For Google AI Overviews / AI Mode, Google says [no special schema.org markup is required](https://developers.google.com/search/docs/appearance/ai-features); ordinary SEO and accurate visible content still matter. This guidance is specific to Google's search features, not every AI agent.
+- Test representative **live product, article, and homepage URLs** with [Google Rich Results Test](https://search.google.com/test/rich-results). It checks Google's supported rich-result types, not all schema.org types or AEO performance. Use [Schema Markup Validator](https://validator.schema.org/) for broader schema.org inspection; Google explains the [difference between the tools](https://developers.google.com/search/docs/appearance/structured-data). Re-test after theme/app changes.
 
 ---
 
@@ -288,6 +335,10 @@ The general shape holds: an app fills a standard slot, it never adds one.
 - [Zero results with filters set to "Any"](https://community.shopify.dev/t/i-am-trying-to-query-products-from-our-demo-store-with-all-filters-set-to-any-but-am-not-getting-any-results/35690) — the default US buyer context and shipping-destination gating in Global Catalog
 - [Metafields not being returned or searched](https://community.shopify.dev/t/metafields-not-being-returned-or-searched/25417)
 - [llms.txt and agents.md](https://community.shopify.dev/t/llms-txt-and-agents-md/34049)
+
+### Theme JSON-LD source (pinned revisions)
+- Dawn `258f00f64365e2018ca4c62778a6bf55a5d3cd18`: [header](https://github.com/Shopify/dawn/blob/258f00f64365e2018ca4c62778a6bf55a5d3cd18/sections/header.liquid#L461-L499), [product](https://github.com/Shopify/dawn/blob/258f00f64365e2018ca4c62778a6bf55a5d3cd18/sections/main-product.liquid#L749-L751), [featured product](https://github.com/Shopify/dawn/blob/258f00f64365e2018ca4c62778a6bf55a5d3cd18/sections/featured-product.liquid#L501-L503), [article](https://github.com/Shopify/dawn/blob/258f00f64365e2018ca4c62778a6bf55a5d3cd18/sections/main-article.liquid#L291-L293)
+- Horizon `5acd1b6b66c02f61d3216e3adace5dd9e0404fc9`: [header](https://github.com/Shopify/horizon/blob/5acd1b6b66c02f61d3216e3adace5dd9e0404fc9/sections/header.liquid#L326-L336), [product](https://github.com/Shopify/horizon/blob/5acd1b6b66c02f61d3216e3adace5dd9e0404fc9/sections/product-information.liquid#L1-L3), [featured product](https://github.com/Shopify/horizon/blob/5acd1b6b66c02f61d3216e3adace5dd9e0404fc9/sections/featured-product.liquid#L1-L3), [article](https://github.com/Shopify/horizon/blob/5acd1b6b66c02f61d3216e3adace5dd9e0404fc9/sections/main-blog-post.liquid#L57-L59)
 
 ### Related documents in this repository
 - [Tips & Best Practices](tips.md)

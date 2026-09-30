@@ -8,8 +8,13 @@ code {
 }
 
 #catalog-fields.page,
+#storefront-schema.page,
 #resources.page {
   place-items: start center;
+}
+
+#storefront-schema h1 {
+  white-space: normal;
 }
 
 .demo-grid {
@@ -391,6 +396,70 @@ code {
   gap: 12px;
 }
 
+.schema-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.schema-scroll-hint {
+  display: none;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.schema-table {
+  width: 100%;
+  min-width: 500px;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.schema-table caption,
+.schema-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.schema-table caption {
+  padding-bottom: 12px;
+}
+
+.schema-table th,
+.schema-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 8px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.schema-table thead {
+  background: var(--soft-blue);
+  color: var(--blue-dark);
+}
+
+.schema-table tbody th {
+  color: var(--green-dark);
+}
+
+.schema-table td {
+  color: var(--muted);
+}
+
+.schema-table td:nth-child(2) {
+  min-width: 125px;
+}
+
+.schema-table td:nth-child(2) code {
+  white-space: nowrap;
+}
+
 .catalog-boundaries article {
   min-width: 0;
   border: 1px solid var(--line);
@@ -654,6 +723,15 @@ code {
 }
 
 @media (max-width: 760px) {
+  .schema-scroll-hint {
+    display: block;
+  }
+
+  #storefront-schema h1 {
+    font-size: 24px;
+    line-height: 1.15;
+  }
+
   .mermaid-shell .mermaid {
     min-width: 520px;
   }

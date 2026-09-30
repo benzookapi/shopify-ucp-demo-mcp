@@ -1421,8 +1421,96 @@ flowchart TB
             </div>
             <nav class="footer-links" aria-label="Catalogフィールドマッピングのナビゲーション">
               <a href="#lifecycle">Checkoutの状態</a>
-              <a href="#faq">FAQ</a>
+              <a href="#storefront-schema">StorefrontのJSON-LD</a>
               <a href="../index.html#catalog-fields">English version</a>
+            </nav>
+          </footer>
+        </section>
+      </section>
+
+      <section class="page" id="storefront-schema">
+        <section class="slide" aria-labelledby="storefront-schema-title">
+          <header>
+            <p class="eyebrow">Storefrontの商品発見 · JSON-LD / WebMCP / UCP</p>
+            <h1 id="storefront-schema-title">JSON-LDはページを説明し、WebMCPは操作を可能にする</h1>
+            <p class="subtitle">
+              DawnとHorizonはschema.orgのJSON-LDを標準出力します。ページの構造化データ、
+              ブラウザのtool、Remote UCP Catalogのresponseは別のインターフェースです。
+              連続した処理でも、互換性のあるschemaでもありません。
+            </p>
+          </header>
+
+          <section class="main-grid" aria-label="Storefrontの構造化データ、インターフェースの境界、検証">
+            <p class="schema-scroll-hint">小さい画面では、図と表を横にスクロールできます。</p>
+            <div class="catalog-diagram-grid">
+              <article class="catalog-diagram-card">
+                <h2>ストアデータにアクセスする3つの並行した経路</h2>
+                <div class="mermaid-shell">
+                  <pre class="mermaid">
+flowchart TB
+  accTitle: JSON-LD、WebMCP、UCP Catalogは別のインターフェース
+  accDescr: ストアデータはテーマのJSON-LDとして構造化データの利用者に公開され、購入者のブラウザ内ではWebMCPから操作され、Remote AgentにはUCP Catalogのresponseとして返されます。
+  DATA["Shopifyのストアデータ"]
+  DATA --> THEME["Liquidテーマ"]
+  THEME --> LD["schema.org JSON-LD&lt;br/&gt;ページの説明"]
+  LD --> READ["検索エンジン /&lt;br/&gt;構造化データの利用者"]
+  DATA --> WEB["Shopify WebMCP&lt;br/&gt;Storefront API + cart actions"]
+  WEB --> BROWSER["対応ブラウザのAgent&lt;br/&gt;購入者のlive session"]
+  DATA --> CAT["Shopify Catalog services"]
+  CAT --> MCP["UCP Catalog over MCP&lt;br/&gt;固定されたresponse schema"]
+  MCP --> AGENT["Remote Agent / このwrapper"]
+                  </pre>
+                </div>
+              </article>
+
+              <article class="catalog-diagram-card request-response">
+                <h2>DawnとHorizonの標準出力</h2>
+                <div class="schema-table-wrap">
+                  <table class="schema-table">
+                    <caption>2026-09-30に固定revisionの公開ソースを確認。利用中のversionや有効なsectionにより異なります。</caption>
+                    <thead><tr><th scope="col">ページ / section</th><th scope="col">schema.orgの型</th><th scope="col">参照元</th></tr></thead>
+                    <tbody>
+                      <tr><th scope="row">標準ヘッダー</th><td><code>Organization</code></td><td>テーマのJSON-LD。名前、URL、設定時のロゴ。DawnはSNSの<code>sameAs</code>も追加。</td></tr>
+                      <tr><th scope="row">トップページ · Dawn</th><td><code>WebSite</code> + <code>SearchAction</code></td><td>テーマのJSON-LD。Googleのサイトリンク検索ボックスは2024年に廃止。</td></tr>
+                      <tr><th scope="row">商品 / 注目の商品</th><td><code>Product</code> / <code>ProductGroup</code></td><td><code>structured_data</code> filter。公式仕様ではvariantなし / ありで区別。価格、在庫、ブランド、画像など。</td></tr>
+                      <tr><th scope="row">ブログ記事</th><td><code>Article</code></td><td><code>structured_data</code> filter。</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="schema-note">
+                  Theme Storeは商品の構造化データを要求しますが、すべてのschema型は要求しません。
+                  <a class="inline-link" href="https://shopify.dev/docs/api/liquid/filters/structured_data">Liquidの仕様</a> ·
+                  <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#theme-json-ld-source-pinned-revisions">確認したテーマソース</a>。
+                </p>
+              </article>
+            </div>
+
+            <div class="catalog-boundaries">
+              <article>
+                <strong>カスタマイズはページ単位</strong>
+                <span>確認したテーマは<code>FAQPage</code>、<code>BreadcrumbList</code>、collectionの<code>ItemList</code> / <code>CollectionPage</code>を追加しません。ReviewのJSON-LDは保証されないためappやfilterの出力を確認します。テーマ編集でCatalog metadataは上書きできません。</span>
+              </article>
+              <article>
+                <strong>AEOの成果を保証するものではない</strong>
+                <span>Liquid storefrontにWebMCPは提供されますが、対応するブラウザAgentが必要です。JSON-LDはAIでの推薦を保証しません。<a class="inline-link" href="https://developers.google.com/search/docs/appearance/ai-features">Google AI Overviews / AI Mode</a>に専用schemaは不要です。</span>
+              </article>
+              <article>
+                <strong>実ストアを検証する</strong>
+                <span>商品・記事・トップページのURLを<a class="inline-link" href="https://search.google.com/test/rich-results">Google リッチリザルトテスト</a>で確認します。対象はGoogle対応の型です。schema.org全般には<a class="inline-link" href="https://validator.schema.org/">Schema Markup Validator</a>を使います。どちらもAEOの成果は測定しません。</span>
+              </article>
+            </div>
+          </section>
+
+          <footer>
+            <div>
+              <strong>対象範囲:</strong> テーマのversion、app、Merchantの編集で実際の出力は変わります。
+              表示内容と一致するmarkupにし、矛盾した重複を避けます。
+              <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#9-storefront-json-ld-webmcp-and-catalog">出典付きの詳しい説明を見る。</a>
+            </div>
+            <nav class="footer-links" aria-label="Storefrontの構造化データのナビゲーション">
+              <a href="#catalog-fields">Catalogのフィールド</a>
+              <a href="#faq">FAQ</a>
+              <a href="../index.html#storefront-schema">English version</a>
             </nav>
           </footer>
         </section>
@@ -1498,7 +1586,7 @@ flowchart TB
               <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/tips.md#faq--common-shopify-agentic-commerce-misconceptions">tips.md</a>を参照してください。
             </div>
             <nav class="footer-links" aria-label="FAQナビゲーション">
-              <a href="#catalog-fields">Catalogのフィールド</a>
+              <a href="#storefront-schema">StorefrontのJSON-LD</a>
               <a href="#resources">技術資料</a>
               <a href="../index.html#faq">English version</a>
             </nav>
@@ -1535,7 +1623,7 @@ flowchart TB
                 <p>
                   Shopifyの商品データからUCPフィールドへの対応、GlobalとStorefront
                   Catalogの違い、Admin mapping、推論metadata、request入力、結果の順序、
-                  custom dataの制約を説明します。
+                  custom dataの制約、StorefrontのJSON-LDとWebMCPの違い、検証方法を説明します。
                 </p>
                 <div class="resource-best-for">用途: フィールドの参照元、metadata、queryの挙動、カスタマイズ境界</div>
               </article>
