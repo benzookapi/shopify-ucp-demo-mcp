@@ -455,8 +455,9 @@ This is a manual experiment, not an automated production-store mutation.
    and results over time, not just the displayed title. In the maintainer's
    **2026-10-27 (UTC)** test, the fresh title was returned while the item still
    ranked 16 of 30; about three hours later it ranked first.
-4. After the title-search positive control changes, test the category-only
-   color using `filters.attributes`, plus an option color as a comparison.
+4. After the title-search positive control changes, test the color saved only
+   in a category metafield using `filters.attributes`, plus an option color as
+   a comparison.
    Record exact inputs, times, returned products, and `messages`. Also compare
    `lookup_catalog` / `get_product` responses to distinguish returned data from
    matching behaviour. Use the [direct request example](catalog-field-mapping.md#attribute-filters-and-shop-scope)
@@ -465,11 +466,11 @@ This is a manual experiment, not an automated production-store mutation.
 5. Restore the original title and test values. Do not leave test data on a
    live listing or publish store/product identifiers in shared reports.
 
-The reported category-only Yellow value still did not match on 2026-10-27,
+The reported Yellow value saved only in a category metafield still did not match on 2026-10-27,
 more than 24 hours after being saved; option Black matched and `messages` was
 empty. This does not prove a universal exclusion or an indexing schedule.
 The title control confirms only the tested title-search signal, not every
-filter/enrichment pipeline. [Catalog mapping Help](https://help.shopify.com/en/manual/shopify-catalog/mapping)
+filter/enrichment pipeline. [Shopify Catalog mapping Help](https://help.shopify.com/en/manual/shopify-catalog/mapping)
 documents delayed processing, not a fixed indexing SLA.
 
 Before testing, also check [Catalog eligibility, including account standing and history](https://help.shopify.com/en/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history),

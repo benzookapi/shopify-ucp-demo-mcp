@@ -2,7 +2,7 @@
 
 This document covers implementation tips for the Shopify Catalog and Checkout MCPs, plus direct-upstream verification techniques. Where a feature is not exposed by this sample wrapper, the text says so.
 
-> **Verified:** 2026-10-29. Maintainer-reported observations retain their original test dates and are not platform guarantees.
+> **Verified:** 2026-10-29, including the current Help Center mapping guidance. Maintainer-reported observations retain their original test dates and are not platform guarantees.
 
 ## 1. Combine `ships_to` and `ships_from` for origin-specific queries
 
@@ -452,17 +452,8 @@ options, and a combination-metafield key for Catalog grouping. They do not add
 new Catalog response fields.
 
 Global `filters.attributes` supports `Color`, `Size`, and `Target gender`, but
-Shopify does not document whether merchant-entered category metafield values
-are used for matching. In the maintainer's **2026-10-27 (UTC)** demo-store test,
-a color saved only in a category metafield did not match after a title-search
-positive control. This is an observation, not a universal search limitation.
-
-The **2026-10-26** tests did not return the raw category values in Catalog
-responses or the tested product's default `structured_data` JSON-LD.
-Documented Global `metadata.*` enrichment is inferred; absence from a response
-alone does not establish matching behaviour. For explicit representation of a
-color/size, use real variant options when appropriate, optionally connected to
-category metafields; that does not guarantee ranking or matching.
-
-See [category metafields and the full observations](catalog-field-mapping.md#5a-category-metafields)
-and the [controlled verification procedure](test-with-ucp-cli.md#8-verify-category-metafield-matching-without-inferring-it-from-responses).
+its use of merchant-entered category metafield values is undocumented. In the
+**2026-10-26/27 (UTC)** tests, the tested category metafield values were absent
+from Catalog/default JSON-LD and a color saved only in a category metafield did
+not match; these are observations, not platform guarantees—see the
+[full observations and practical guidance](catalog-field-mapping.md#reported-demo-store-observations-utc).

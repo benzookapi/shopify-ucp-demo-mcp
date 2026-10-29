@@ -1340,7 +1340,7 @@
             <p class="eyebrow">Shopify Catalogのフィールドマッピング</p>
             <h1 id="catalog-fields-title">商品データが値を決め、リクエストが表示対象を選ぶ</h1>
             <p class="subtitle">
-              Merchantの商品データとCatalog mappingが、Shopify Catalogに入る値を決めます。
+              Merchantの商品データとチャネルマッピングが、Shopify Catalogに入る値を決めます。
               検索リクエストは商品を選択して並べますが、responseの形はUCPと
               Shopifyが宣言したextensionによって固定されています。
             </p>
@@ -1360,7 +1360,7 @@ flowchart TB
     STD["標準の商品データ&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
     CUSTOM["カスタムMetafields / Metaobjects"]
     CATMF["カテゴリーメタフィールド&lt;br/&gt;タクソノミーの属性"]
-    MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalogのみ&lt;/b&gt;"]
+    MAP["チャネルマッピング（Shopify Catalog）&lt;br/&gt;&lt;b&gt;Global Catalogのみ&lt;/b&gt;"]
   end
   subgraph CATALOG["Shopify Catalog"]
     ING["掲載要件 · 正規化&lt;br/&gt;AIによる補完"]
@@ -1370,12 +1370,11 @@ flowchart TB
     EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;推論metadata"]
     OUT["順序付けされたproducts[]"]
   end
-  STD -->|"title · description · category&lt;br/&gt;+ list price · variant grouping"| MAP
+  STD -->|"title · description&lt;br/&gt;+ list price · variant grouping"| MAP
   CUSTOM -->|"対応するマッピング元"| MAP
   CATMF -->|"組み合わせメタフィールド&lt;br/&gt;variant grouping"| MAP
-  CATMF -.->|"filterとの照合?&lt;br/&gt;公開されていない"| ING
   CATMF -->|"接続されたバリアントオプション"| STD
-  STD -->|"その他の標準フィールド"| ING
+  STD -->|"category + その他の標準フィールド"| ING
   MAP --> ING
   ING --> CORE
   ING --> EXT
@@ -1405,7 +1404,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Merchantが変更できる範囲</strong>
-                <span><code>title</code>、<code>description</code>、<code>category</code>、list priceの参照元とグループ化を設定できます。カテゴリーメタフィールドはresponseフィールドを増やしません。グループ化は別商品をまとめる設定で、属性filterの参照元設定ではありません。</span>
+                <span><code>title</code>と<code>description</code>の参照元、list price、Custom variant grouping / Custom optionsを設定できます。商品カテゴリーの参照元は変更できず、カテゴリーメタフィールドはresponseフィールドを増やしません。</span>
               </article>
               <article>
                 <strong>requestが変更できる範囲</strong>
@@ -1419,14 +1418,15 @@ flowchart TB
             <aside class="catalog-note" aria-label="カテゴリーメタフィールドの観測とCatalogの掲載条件">
               <strong>標準属性であっても、filterの入力になるとは限らない</strong>
               <p>カテゴリーメタフィールドは、ストアのfilter・swatchやバリアントオプションとの接続に使えます。Globalの<code>filters.attributes</code>はShopify拡張です。属性同士はAND、同じ属性の値はORで照合します。Agent profileにはCatalogの基本capabilityと<code>dev.shopify.catalog.global</code>を宣言します。</p>
-              <p><strong>2026-10-27（UTC）の観測:</strong> Maintainerのデモストアでは、タイトル検索の対照確認後も、カテゴリーメタフィールドにだけ保存したYellowは一致せず、オプションのBlackは一致しました。これは仕様上のルールではありません。<a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">日付付きの検証とグループ化の注意点を見る。</a></p>
+              <p><strong>2026-10-27（UTC）の観測:</strong> Maintainerの検証では、カテゴリーメタフィールドにだけ保存した色は一致しませんでした。これは仕様上のルールではありません—<a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">詳しい観測結果を見る。</a></p>
+              <p><strong>商品カテゴリー:</strong> 引き続き標準の商品データですが、Catalog側の分類はAdminのカテゴリーと異なる場合があります。Adminのカテゴリーは正確に設定してください。チャネルマッピングで参照元は変更できません。<a class="inline-link" href="https://help.shopify.com/ja/manual/shopify-catalog/requirements#product-categories">分類に関する要件を見る。</a></p>
               <p>データのmappingで、<a class="inline-link" href="https://help.shopify.com/ja/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history">アカウントのステータス・運営履歴を含むCatalogの掲載条件</a>を回避することはできません。公開資料の確認日: 2026-10-29。</p>
             </aside>
           </section>
 
           <footer>
             <div>
-              <strong>境界:</strong> Catalog mappingはShopify Catalog上の商品表現を
+              <strong>境界:</strong> チャネルマッピングはShopify Catalog上の商品表現を
               変更しますが、Storefront Catalog MCPのresponse設定ではありません。
               <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">完全なフィールドガイドを見る。</a>
             </div>
@@ -1499,7 +1499,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>カスタマイズはページ単位</strong>
-                <span>確認したテーマは<code>FAQPage</code>、<code>BreadcrumbList</code>、collectionの<code>ItemList</code> / <code>CollectionPage</code>を追加しません。ReviewのJSON-LDは保証されません。2026-10-26の検証ではカテゴリーの生の値は含まれず、variant名にはoption値が含まれました。テーマ編集でCatalog metadataは上書きできません。</span>
+                <span>確認したテーマは<code>FAQPage</code>、<code>BreadcrumbList</code>、collectionの<code>ItemList</code> / <code>CollectionPage</code>を追加しません。ReviewのJSON-LDは保証されません。2026-10-26の観測では、<code>category</code>に商品カテゴリー名は含まれましたが、カテゴリーメタフィールドの値は含まれませんでした。仕様上の保証ではありません—<a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">詳細を見る。</a> テーマ編集でCatalog metadataは上書きできません。</span>
               </article>
               <article>
                 <strong>AEOの成果を保証するものではない</strong>
@@ -1593,8 +1593,7 @@ flowchart TB
                 <summary>カテゴリーメタフィールドは、任意のカスタムメタフィールドと同じ扱いですか？</summary>
                 <div class="faq-answer">
                   <p>いいえ。タクソノミーに紐づく標準属性で、ストアのfilter・swatch、バリアントオプションとの接続、Catalogのグループ化での利用が公開されています。responseのフィールドは増えません。</p>
-                  <p>Globalの<code>filters.attributes</code>は<code>Color</code>・<code>Size</code>・<code>Target gender</code>に対応しますが、Merchantが入力したカテゴリーの値を照合するかは未公開です。Maintainerの2026-10-27の検証では、カテゴリーにだけ設定した色は一致しませんでした。2026-10-26にはCatalogと標準JSON-LDの検証対象の出力に生のカテゴリー値は含まれませんでした。いずれも観測であり、普遍的な制約ではありません。</p>
-                  <p>色やサイズを明示的に表現するには、適切な場合に実際のバリアントオプションを使い、必要に応じてカテゴリーメタフィールドに接続します。順位や照合を保証するものではありません。<a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">根拠と注意点を見る。</a></p>
+                  <p>Globalの<code>filters.attributes</code>は<code>Color</code>、<code>Size</code>、<code>Target gender</code>に対応しますが、Merchantが入力したカテゴリーメタフィールドの値を照合に使うかは公開されていません。2026-10-27のMaintainerの検証ではカテゴリーメタフィールドにだけ設定した色は一致しませんでした。観測であり、仕様上の制限ではありません—<a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">詳しい観測結果と実務上のヒントを見る。</a></p>
                 </div>
               </details>
             </div>

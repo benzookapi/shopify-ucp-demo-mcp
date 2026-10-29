@@ -1350,7 +1350,7 @@
             <p class="eyebrow">Shopify Catalog field mapping</p>
             <h1 id="catalog-fields-title">Product data defines values; requests choose results</h1>
             <p class="subtitle">
-              Merchant data and Catalog mapping determine which values enter Shopify
+              Merchant data and Channel mapping determine which values enter Shopify
               Catalog. A search request then selects and orders products, while the
               response shape stays fixed by UCP and Shopify's declared extensions.
             </p>
@@ -1370,7 +1370,7 @@ flowchart TB
     STD["Standard product data&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
     CUSTOM["Custom metafields / Metaobjects"]
     CATMF["Category metafields&lt;br/&gt;taxonomy attributes"]
-    MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalog only&lt;/b&gt;"]
+    MAP["Channel mapping (Shopify Catalog)&lt;br/&gt;&lt;b&gt;Global Catalog only&lt;/b&gt;"]
   end
   subgraph CATALOG["Shopify Catalog"]
     ING["Eligibility · normalization&lt;br/&gt;AI enrichment"]
@@ -1380,12 +1380,11 @@ flowchart TB
     EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;inferred metadata"]
     OUT["Ordered products[]"]
   end
-  STD -->|"title · description · category&lt;br/&gt;+ list price · variant grouping"| MAP
+  STD -->|"title · description&lt;br/&gt;+ list price · variant grouping"| MAP
   CUSTOM -->|"supported mapped source"| MAP
   CATMF -->|"combination metafield&lt;br/&gt;variant grouping"| MAP
-  CATMF -.->|"filter matching?&lt;br/&gt;not documented"| ING
   CATMF -->|"connected variant options"| STD
-  STD -->|"all other standard fields"| ING
+  STD -->|"category + other standard fields"| ING
   MAP --> ING
   ING --> CORE
   ING --> EXT
@@ -1415,7 +1414,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Merchant-controlled</strong>
-                <span>Choose sources for <code>title</code>, <code>description</code>, <code>category</code>, and list price; configure grouping. Category metafields do not add response fields. Grouping combines separate products—not attribute-filter sources.</span>
+                <span>Choose sources for <code>title</code> and <code>description</code>, select list price, and configure Custom variant grouping / Custom options. Product category cannot be re-mapped; category metafields do not add response fields.</span>
               </article>
               <article>
                 <strong>Request-controlled</strong>
@@ -1429,14 +1428,15 @@ flowchart TB
             <aside class="catalog-note" aria-label="Category metafield observations and Catalog eligibility">
               <strong>Standard attribute ≠ guaranteed filter input</strong>
               <p>Category metafields support storefront filters/swatches and connected variant options. Global <code>filters.attributes</code> is a Shopify extension: attribute entries use AND, values use OR. Declare the base Catalog capabilities plus <code>dev.shopify.catalog.global</code> in the agent profile.</p>
-              <p><strong>Observed 2026-10-27 (UTC):</strong> A category-only Yellow value did not match in the maintainer's demo-store test after a title-search control; option Black matched. This is not a platform rule. <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">See the dated tests and grouping warning.</a></p>
+              <p><strong>Observed 2026-10-27 (UTC):</strong> A color saved only in a category metafield did not match in the maintainer's test; this is not a platform rule—<a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">see the full observations.</a></p>
+              <p><strong>Product category:</strong> It remains standard product data, but Catalog's classification can differ from the category in Admin. Keep the Admin category accurate; Channel mapping cannot re-point it. <a class="inline-link" href="https://help.shopify.com/en/manual/shopify-catalog/requirements#product-categories">Read the classification requirements.</a></p>
               <p>Data mapping does not bypass <a class="inline-link" href="https://help.shopify.com/en/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history">Catalog inclusion requirements, including account standing and operating history</a>. Public references reviewed 2026-10-29.</p>
             </aside>
           </section>
 
           <footer>
             <div>
-              <strong>Boundary:</strong> Catalog mapping changes a merchant's
+              <strong>Boundary:</strong> Channel mapping changes a merchant's
               representation in Shopify Catalog; it does not configure Storefront
               Catalog MCP responses. <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md">Read the complete field guide.</a>
             </div>
@@ -1509,7 +1509,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Customization is page-level</strong>
-                <span>The inspected themes do not add <code>FAQPage</code>, <code>BreadcrumbList</code>, or collection <code>ItemList</code> / <code>CollectionPage</code>. Review JSON-LD is not guaranteed. In the 2026-10-26 test, raw category metafields were absent; variant names contained option labels. Theme edits do not override Catalog metadata.</span>
+                <span>The inspected themes do not add <code>FAQPage</code>, <code>BreadcrumbList</code>, or collection <code>ItemList</code> / <code>CollectionPage</code>. Review JSON-LD is not guaranteed. Observed 2026-10-26: <code>category</code> contained the product category name, but category metafield values were absent—not a platform guarantee; <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">see details.</a> Theme edits do not override Catalog metadata.</span>
               </article>
               <article>
                 <strong>No guaranteed AEO outcome</strong>
@@ -1603,8 +1603,7 @@ flowchart TB
                 <summary>Are category metafields treated like arbitrary custom metafields?</summary>
                 <div class="faq-answer">
                   <p>No. They are standard taxonomy attributes with documented uses in storefront filters/swatches, connected variant options, and Catalog grouping. They do not add response fields.</p>
-                  <p>Global <code>filters.attributes</code> supports <code>Color</code>, <code>Size</code>, and <code>Target gender</code>, but its use of merchant-entered category values is undocumented. A category-only color did not match in the 2026-10-27 maintainer test; raw category values were absent from tested Catalog and default JSON-LD output on 2026-10-26. These are observations, not universal limits.</p>
-                  <p>Use real variant options for explicit color/size representation when appropriate, optionally connected to category metafields—not as a guarantee of ranking or matching. <a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">Read the evidence and caveats.</a></p>
+                  <p>Global <code>filters.attributes</code> supports <code>Color</code>, <code>Size</code>, and <code>Target gender</code>, but its use of merchant-entered category metafield values is undocumented. A color saved only in a category metafield did not match in the 2026-10-27 maintainer test—an observation, not a platform limit; <a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#reported-demo-store-observations-utc">read the full observations and guidance.</a></p>
                 </div>
               </details>
             </div>
