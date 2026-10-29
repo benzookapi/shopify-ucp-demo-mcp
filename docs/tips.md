@@ -1,6 +1,8 @@
 # Tips & Best Practices — Shopify UCP Demo MCP
 
-This document covers implementation tips for getting better results from the Shopify Catalog and Checkout MCPs. All of these are implemented in this sample repository and can be used as a reference for your own UCP agent.
+This document covers implementation tips for the Shopify Catalog and Checkout MCPs, plus direct-upstream verification techniques. Where a feature is not exposed by this sample wrapper, the text says so.
+
+> **Verified:** 2026-10-29. Maintainer-reported observations retain their original test dates and are not platform guarantees.
 
 ## 1. Combine `ships_to` and `ships_from` for origin-specific queries
 
@@ -130,13 +132,24 @@ Amounts are minor currency units: `15000` means $150.00 USD.
 If you need fresh variant-level detail for a specific product, call
 `get_product` with the product ID and selected option labels.
 
-This sample also supports a saved Catalog default. When
-`SHOPIFY_CATALOG_ID` is set, `search_products` sends its value as
-`catalog.saved_catalog_slug`; the saved Catalog's inputs and overrides take
-precedence over runtime search filters. When it is unset, searches use the
-default Global Catalog across eligible merchants. Despite the environment
-variable name, the value is a saved Catalog slug from the Dev Dashboard, not a
-Shopify GID.
+New integrations should pass a saved Dev Dashboard configuration as
+`catalog.catalog_id`. `catalog.saved_catalog_slug` is its deprecated
+compatibility alias; `catalog_id` wins if both are supplied. Saved filters set
+the request's scope ceiling: in-scope values narrow results, while out-of-scope
+values fall back to the saved filters. A saved query prefix is prepended to
+`catalog.query`. See [Global Catalog MCP](https://shopify.dev/docs/agents/catalog/global-catalog).
+
+This sample still sends `SHOPIFY_CATALOG_ID` through the legacy
+`catalog.saved_catalog_slug` field; this documentation revision does not change
+that implementation. Its value identifies the saved Catalog configuration,
+not a shop/product GID. If unset, the wrapper searches the default Global
+Catalog across eligible merchants.
+
+In the supplied Dashboard preview example (test date not recorded), changing
+the left-hand filters left the displayed request with only `catalog_id`,
+because the configuration held the filters. That UI observation is not a
+separate wire-format guarantee: inspect the saved configuration as well as the
+request when debugging scope.
 
 ## 6. Discover Checkout MCP via /.well-known/ucp and fall back gracefully
 
@@ -397,11 +410,17 @@ and is useful when the agent repeatedly applies the same source scope or
 filters.
 
 If a Saved Catalog is used, Catalog operations receive its
-`saved_catalog_slug` rather than a Shopify GID. Its saved inputs and overrides
-take precedence over runtime search filters. In this sample,
-`SHOPIFY_CATALOG_ID` is the historical environment-variable name, but its value
-must be that slug. The Dev Dashboard client credentials used by this sample and
-the product or variant IDs returned by Catalog are separate identifiers.
+`catalog.catalog_id`; `catalog.saved_catalog_slug` is a deprecated alias.
+Saved filters define the scope ceiling: in-scope values narrow results,
+out-of-scope values fall back to saved filters, and the saved query prefix is
+prepended to the request query. This sample still forwards
+`SHOPIFY_CATALOG_ID` through the legacy alias. The saved configuration ID is
+separate from client credentials and shop/product/variant GIDs. See the
+[current parameter reference](https://shopify.dev/docs/agents/catalog/global-catalog).
+
+Catalog inclusion is also distinct from saved scope and matching. Review the
+[store, account-standing/history, and product requirements](https://help.shopify.com/en/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history)
+before diagnosing zero results as a filter problem.
 
 ### Can an agent cache Catalog search results or product images?
 
@@ -423,3 +442,27 @@ shopping assistant. Use [Global Catalog MCP](https://shopify.dev/docs/agents/cat
 for cross-merchant discovery, comparison shopping, and recommendations not tied
 to one store. Both implement the UCP Catalog capability, but they differ in
 scope, authentication, and Shopify extension fields.
+
+### Are category metafields treated like custom metafields in Shopify Catalog?
+
+No. Category metafields are standard product attributes tied to Shopify's
+Standard Product Taxonomy, such as Color, Size, Fabric, and Target gender.
+Their documented uses include storefront filters/swatches, connecting variant
+options, and a combination-metafield key for Catalog grouping. They do not add
+new Catalog response fields.
+
+Global `filters.attributes` supports `Color`, `Size`, and `Target gender`, but
+Shopify does not document whether merchant-entered category metafield values
+are used for matching. In the maintainer's **2026-10-27 (UTC)** demo-store test,
+a color saved only in a category metafield did not match after a title-search
+positive control. This is an observation, not a universal search limitation.
+
+The **2026-10-26** tests did not return the raw category values in Catalog
+responses or the tested product's default `structured_data` JSON-LD.
+Documented Global `metadata.*` enrichment is inferred; absence from a response
+alone does not establish matching behaviour. For explicit representation of a
+color/size, use real variant options when appropriate, optionally connected to
+category metafields; that does not guarantee ranking or matching.
+
+See [category metafields and the full observations](catalog-field-mapping.md#5a-category-metafields)
+and the [controlled verification procedure](test-with-ucp-cli.md#8-verify-category-metafield-matching-without-inferring-it-from-responses).

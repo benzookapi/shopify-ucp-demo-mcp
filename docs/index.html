@@ -1357,6 +1357,7 @@
           </header>
 
           <section class="main-grid" aria-label="Shopify Catalog field sources, customization boundaries, and request-response flow">
+            <p class="schema-scroll-hint">On small screens, scroll the data-source diagram horizontally.</p>
             <div class="catalog-diagram-grid">
               <article class="catalog-diagram-card">
                 <h2>1 · Where response fields come from</h2>
@@ -1367,7 +1368,8 @@ flowchart TB
   accDescr: Standard Shopify product data and supported mapped custom data enter Shopify Catalog, which returns a fixed UCP response plus Shopify extension fields.
   subgraph ADMIN["Shopify Admin"]
     STD["Standard product data&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
-    CUSTOM["Metafields / Metaobjects"]
+    CUSTOM["Custom metafields / Metaobjects"]
+    CATMF["Category metafields&lt;br/&gt;taxonomy attributes"]
     MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalog only&lt;/b&gt;"]
   end
   subgraph CATALOG["Shopify Catalog"]
@@ -1378,8 +1380,11 @@ flowchart TB
     EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;inferred metadata"]
     OUT["Ordered products[]"]
   end
-  STD -->|"title · description · category&lt;br/&gt;+ variant grouping"| MAP
+  STD -->|"title · description · category&lt;br/&gt;+ list price · variant grouping"| MAP
   CUSTOM -->|"supported mapped source"| MAP
+  CATMF -->|"combination metafield&lt;br/&gt;variant grouping"| MAP
+  CATMF -.->|"filter matching?&lt;br/&gt;not documented"| ING
+  CATMF -->|"connected variant options"| STD
   STD -->|"all other standard fields"| ING
   MAP --> ING
   ING --> CORE
@@ -1397,7 +1402,7 @@ flowchart TB
 flowchart TB
   accTitle: Catalog query and response relationship
   accDescr: Search query, buyer context, and supported filters select and rank Catalog entries without changing the fixed response schema.
-  REQUEST["Request inputs&lt;br/&gt;&lt;b&gt;query + like (Global)&lt;/b&gt;: intent and similarity&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: country · language · currency · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available; Global also adds ships_to · category · rating"]
+  REQUEST["Request inputs&lt;br/&gt;&lt;b&gt;query + like (Global)&lt;/b&gt;: intent and similarity&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: country · language · currency · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available; Global also adds&lt;br/&gt;ships_to · categories · attributes (Color · Size · Target gender) · rating"]
   REQUEST --> SEARCH["search_catalog"]
   SEARCH --> MATCH["Eligibility + relevance&lt;br/&gt;select and order results&lt;br/&gt;no public sort weights"]
   MATCH --> PAGE["Ordered page&lt;br/&gt;featured variant and media first"]
@@ -1410,7 +1415,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Merchant-controlled</strong>
-                <span>Re-point <code>title</code>, <code>description</code>, and <code>category</code>, and configure custom variant grouping. Arbitrary response fields cannot be added.</span>
+                <span>Choose sources for <code>title</code>, <code>description</code>, <code>category</code>, and list price; configure grouping. Category metafields do not add response fields. Grouping combines separate products—not attribute-filter sources.</span>
               </article>
               <article>
                 <strong>Request-controlled</strong>
@@ -1421,6 +1426,12 @@ flowchart TB
                 <span>Eligibility, normalization, inferred Global Catalog fields, and relevance ranking. The ranking algorithm and its weights are not published.</span>
               </article>
             </div>
+            <aside class="catalog-note" aria-label="Category metafield observations and Catalog eligibility">
+              <strong>Standard attribute ≠ guaranteed filter input</strong>
+              <p>Category metafields support storefront filters/swatches and connected variant options. Global <code>filters.attributes</code> is a Shopify extension: attribute entries use AND, values use OR. Declare the base Catalog capabilities plus <code>dev.shopify.catalog.global</code> in the agent profile.</p>
+              <p><strong>Observed 2026-10-27 (UTC):</strong> A category-only Yellow value did not match in the maintainer's demo-store test after a title-search control; option Black matched. This is not a platform rule. <a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">See the dated tests and grouping warning.</a></p>
+              <p>Data mapping does not bypass <a class="inline-link" href="https://help.shopify.com/en/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history">Catalog inclusion requirements, including account standing and operating history</a>. Public references reviewed 2026-10-29.</p>
+            </aside>
           </section>
 
           <footer>
@@ -1498,7 +1509,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Customization is page-level</strong>
-                <span>The inspected themes do not add <code>FAQPage</code>, <code>BreadcrumbList</code>, or collection <code>ItemList</code> / <code>CollectionPage</code>. Review JSON-LD is not guaranteed; inspect app/filter output. Theme edits do not override Catalog metadata.</span>
+                <span>The inspected themes do not add <code>FAQPage</code>, <code>BreadcrumbList</code>, or collection <code>ItemList</code> / <code>CollectionPage</code>. Review JSON-LD is not guaranteed. In the 2026-10-26 test, raw category metafields were absent; variant names contained option labels. Theme edits do not override Catalog metadata.</span>
               </article>
               <article>
                 <strong>No guaranteed AEO outcome</strong>
@@ -1506,7 +1517,7 @@ flowchart TB
               </article>
               <article>
                 <strong>Check the live store</strong>
-                <span>Test product, article, and homepage URLs with <a class="inline-link" href="https://search.google.com/test/rich-results">Google Rich Results Test</a> for Google-supported types. Use <a class="inline-link" href="https://validator.schema.org/">Schema Markup Validator</a> for broader schema.org checks. Neither measures AEO performance.</span>
+                <span>Use <a class="inline-link" href="https://search.google.com/test/rich-results">Google Rich Results Test</a> → View tested page → HTML; find <code>application/ld+json</code>. For password-protected pages, paste rendered HTML into Code mode. Use <a class="inline-link" href="https://validator.schema.org/">Schema Markup Validator</a> for broader checks. Neither measures AEO performance.</span>
               </article>
             </div>
           </section>
@@ -1530,7 +1541,7 @@ flowchart TB
         <section class="slide" aria-labelledby="faq-title">
           <header>
             <p class="eyebrow">Implementation FAQ</p>
-            <h1 id="faq-title">Six distinctions prevent common integration mistakes</h1>
+            <h1 id="faq-title">Seven distinctions prevent common integration mistakes</h1>
             <p class="subtitle">
               Expand each answer for the practical boundary. The maintained
               source, full wording, and Shopify documentation links live in
@@ -1568,7 +1579,7 @@ flowchart TB
                 <summary>Do I need to create my own Catalog and pass a Catalog ID?</summary>
                 <div class="faq-answer">
                   <p>No. Global Catalog searches eligible Shopify merchants by default. Saved Catalog is optional for repeated scope and filters.</p>
-                  <p>When used, pass its <code>saved_catalog_slug</code>, not a Shopify GID. API credentials and product IDs are separate identifiers.</p>
+                  <p>Use <code>catalog.catalog_id</code>; <code>saved_catalog_slug</code> is deprecated. Saved filters set the scope ceiling: in-scope values narrow results, out-of-scope values fall back to saved filters. A saved query prefix is prepended. This wrapper still uses the legacy alias.</p>
                 </div>
               </details>
 
@@ -1585,6 +1596,15 @@ flowchart TB
                 <div class="faq-answer">
                   <p>Use Storefront Catalog for one known merchant. Use Global Catalog for cross-merchant discovery, comparisons, and recommendations.</p>
                   <p>Both implement UCP Catalog, but their scope, authentication, and Shopify extension fields differ.</p>
+                </div>
+              </details>
+
+              <details class="faq-item">
+                <summary>Are category metafields treated like arbitrary custom metafields?</summary>
+                <div class="faq-answer">
+                  <p>No. They are standard taxonomy attributes with documented uses in storefront filters/swatches, connected variant options, and Catalog grouping. They do not add response fields.</p>
+                  <p>Global <code>filters.attributes</code> supports <code>Color</code>, <code>Size</code>, and <code>Target gender</code>, but its use of merchant-entered category values is undocumented. A category-only color did not match in the 2026-10-27 maintainer test; raw category values were absent from tested Catalog and default JSON-LD output on 2026-10-26. These are observations, not universal limits.</p>
+                  <p>Use real variant options for explicit color/size representation when appropriate, optionally connected to category metafields—not as a guarantee of ranking or matching. <a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">Read the evidence and caveats.</a></p>
                 </div>
               </details>
             </div>

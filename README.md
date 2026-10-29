@@ -123,7 +123,7 @@ For a simplified, presentation-ready visual overview of the UCP buyer journey, s
 
 For an explanation of UCP escalation — what this sample demos, what it doesn't, and how its tools map to the buyer-experience modes — see [docs/escalation.md](docs/escalation.md).
 
-For a detailed reference on Shopify Catalog fields — including UCP Product and Variant fields, Shopify extensions and inferred metadata, merchant data-source mapping, metafield limitations, and search-result ordering — see [docs/catalog-field-mapping.md](docs/catalog-field-mapping.md).
+For a detailed reference on Shopify Catalog fields — including UCP Product and Variant fields, Shopify extensions and attribute filters, inferred metadata, merchant mapping and grouping, category-metafield observations, eligibility references, and search-result ordering — see [docs/catalog-field-mapping.md](docs/catalog-field-mapping.md).
 
 Storefront discovery is a separate layer: Dawn and Horizon emit schema.org JSON-LD for organizations, products, and articles, while WebMCP exposes actions in the shopper's browser. Neither is this server's UCP Catalog response format. For built-in theme output, customization boundaries, AEO caveats, and the Google Rich Results Test, see [Storefront JSON-LD, WebMCP, and Catalog](docs/catalog-field-mapping.md#9-storefront-json-ld-webmcp-and-catalog).
 

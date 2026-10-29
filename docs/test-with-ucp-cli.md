@@ -1,5 +1,7 @@
 # Testing with the UCP CLI
 
+> **Verified:** 2026-10-29 for the added Catalog verification guidance. Dated observations below are maintainer-reported; no merchant data was changed for this documentation revision.
+
 This sample wraps two underlying Shopify MCPs — the **Catalog MCP**
 (`https://catalog.shopify.com/api/ucp/mcp`) and the per-shop
 **Cart / Checkout MCP** (discovered via
@@ -392,7 +394,12 @@ ucp catalog search \
 
 Compare the requests semantically, not byte-for-byte. This wrapper enriches
 `context.intent`, defaults `available` to `true`, caps pagination, adds the
-configured `saved_catalog_slug`, and injects its agent profile. The CLI adds
+configured saved Catalog through the deprecated `saved_catalog_slug` alias,
+and injects its agent profile. New direct integrations should use
+`catalog.catalog_id`; this documentation update does not change the wrapper.
+The wrapper does not expose `filters.attributes` or `filters.shops`, so use
+the direct upstream request in the [field guide](catalog-field-mapping.md#attribute-filters-and-shop-scope)
+to isolate those filters. The CLI adds
 its own profile metadata and renders a different response envelope.
 
 `--dry-run` on any UCP command prints the payload the CLI would send
@@ -408,6 +415,67 @@ know they exist and can test them against Shopify directly:
 |---|---|---|
 | `order get` | Fetch an order after `checkout complete` returns | Out of scope for the demo flow; receipts are surfaced via `permalink_url`. |
 | Order webhooks | Push notifications when an order's state changes | The demo finishes at `checkout complete`; no listener is wired. |
+
+## 8. Verify category metafield matching without inferring it from responses
+
+Use an owned test product and save its original state before making changes.
+This is a manual experiment, not an automated production-store mutation.
+
+1. Select the appropriate product category and use its existing standard
+   category metafield definition, such as `shopify.color-pattern`. Do not create
+   an app-owned lookalike. Choose a test color that occurs nowhere else in the
+   product's options, title, description, or images. Accept the intended value
+   and save it; a proposed Admin suggestion is not evidence of a saved value.
+2. Confirm the saved reference through an authorized Admin GraphQL client.
+   The following read-only query inspects the referenced standard entries:
+
+   ```graphql
+   query CatalogCategoryColor($productId: ID!) {
+     product(id: $productId) {
+       categoryColor: metafield(namespace: "shopify", key: "color-pattern") {
+         references(first: 20) {
+           nodes {
+             ... on Metaobject {
+               displayName
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+   Use your own product GID for `$productId` and an authorized client with
+   `read_products` and `read_metaobjects`; follow pagination if there are more
+   than 20 references. See [Admin product query](https://shopify.dev/docs/api/admin-graphql/latest/queries/product)
+   and [standard category definitions](https://shopify.dev/docs/apps/build/metafields/conditional-metafield-definitions).
+3. Temporarily add a distinctive marker such as `zqtest` to the title. Repeat a
+   direct `search_catalog` query for the marker, keeping the same shop GID,
+   country, availability, saved scope, and profile capabilities. Record ranking
+   and results over time, not just the displayed title. In the maintainer's
+   **2026-10-27 (UTC)** test, the fresh title was returned while the item still
+   ranked 16 of 30; about three hours later it ranked first.
+4. After the title-search positive control changes, test the category-only
+   color using `filters.attributes`, plus an option color as a comparison.
+   Record exact inputs, times, returned products, and `messages`. Also compare
+   `lookup_catalog` / `get_product` responses to distinguish returned data from
+   matching behaviour. Use the [direct request example](catalog-field-mapping.md#attribute-filters-and-shop-scope)
+   and a profile declaring the base Catalog capabilities plus
+   `dev.shopify.catalog.global`.
+5. Restore the original title and test values. Do not leave test data on a
+   live listing or publish store/product identifiers in shared reports.
+
+The reported category-only Yellow value still did not match on 2026-10-27,
+more than 24 hours after being saved; option Black matched and `messages` was
+empty. This does not prove a universal exclusion or an indexing schedule.
+The title control confirms only the tested title-search signal, not every
+filter/enrichment pipeline. [Catalog mapping Help](https://help.shopify.com/en/manual/shopify-catalog/mapping)
+documents delayed processing, not a fixed indexing SLA.
+
+Before testing, also check [Catalog eligibility, including account standing and history](https://help.shopify.com/en/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history),
+the resolved shipping destination (default US in the reported tests), and any
+saved Catalog boundaries. Otherwise zero results do not isolate the attribute.
+For the full dated observations, see [§5a of the field guide](catalog-field-mapping.md#5a-category-metafields).
 
 ## References
 

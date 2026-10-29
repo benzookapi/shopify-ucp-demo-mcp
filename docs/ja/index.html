@@ -1347,6 +1347,7 @@
           </header>
 
           <section class="main-grid" aria-label="Shopify Catalogのフィールド参照元、カスタマイズ境界、requestとresponseの流れ">
+            <p class="schema-scroll-hint">小さい画面では、データソースの図を横にスクロールできます。</p>
             <div class="catalog-diagram-grid">
               <article class="catalog-diagram-card">
                 <h2>1 · responseのフィールドはどこから来るか</h2>
@@ -1357,7 +1358,8 @@ flowchart TB
   accDescr: Shopifyの標準商品データと、マッピングした対応カスタムデータがShopify Catalogに入り、固定されたUCP responseとShopify extensionのフィールドとして返されます。
   subgraph ADMIN["Shopify Admin"]
     STD["標準の商品データ&lt;br/&gt;title · description · category&lt;br/&gt;price · media · variants"]
-    CUSTOM["Metafields / Metaobjects"]
+    CUSTOM["カスタムMetafields / Metaobjects"]
+    CATMF["カテゴリーメタフィールド&lt;br/&gt;タクソノミーの属性"]
     MAP["Catalog mapping&lt;br/&gt;&lt;b&gt;Global Catalogのみ&lt;/b&gt;"]
   end
   subgraph CATALOG["Shopify Catalog"]
@@ -1368,8 +1370,11 @@ flowchart TB
     EXT["Shopify extension&lt;br/&gt;seller · checkout_url&lt;br/&gt;推論metadata"]
     OUT["順序付けされたproducts[]"]
   end
-  STD -->|"title · description · category&lt;br/&gt;+ variant grouping"| MAP
+  STD -->|"title · description · category&lt;br/&gt;+ list price · variant grouping"| MAP
   CUSTOM -->|"対応するマッピング元"| MAP
+  CATMF -->|"組み合わせメタフィールド&lt;br/&gt;variant grouping"| MAP
+  CATMF -.->|"filterとの照合?&lt;br/&gt;公開されていない"| ING
+  CATMF -->|"接続されたバリアントオプション"| STD
   STD -->|"その他の標準フィールド"| ING
   MAP --> ING
   ING --> CORE
@@ -1387,7 +1392,7 @@ flowchart TB
 flowchart TB
   accTitle: Catalogのqueryとresponseの関係
   accDescr: 検索query、購入者context、対応filterは、固定されたresponse schemaを変えずにCatalogの商品を選択して順位付けします。
-  REQUEST["Request入力&lt;br/&gt;&lt;b&gt;query + like（Global）&lt;/b&gt;: 意図と類似性&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: 国 · 言語 · 通貨 · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available、Globalではさらに ships_to · category · rating"]
+  REQUEST["Request入力&lt;br/&gt;&lt;b&gt;query + like（Global）&lt;/b&gt;: 意図と類似性&lt;br/&gt;&lt;b&gt;context&lt;/b&gt;: 国 · 言語 · 通貨 · intent&lt;br/&gt;&lt;b&gt;filters&lt;/b&gt;: available、Globalではさらに&lt;br/&gt;ships_to · categories · attributes（Color · Size · Target gender）· rating"]
   REQUEST --> SEARCH["search_catalog"]
   SEARCH --> MATCH["掲載可否 + relevance&lt;br/&gt;結果を選択して順序付け&lt;br/&gt;順位の重みは非公開"]
   MATCH --> PAGE["順序付けされたpage&lt;br/&gt;最初のvariantとmediaをfeatured表示"]
@@ -1400,7 +1405,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>Merchantが変更できる範囲</strong>
-                <span><code>title</code>、<code>description</code>、<code>category</code>の参照元と、custom variant groupingを設定できます。任意のresponseフィールドは追加できません。</span>
+                <span><code>title</code>、<code>description</code>、<code>category</code>、list priceの参照元とグループ化を設定できます。カテゴリーメタフィールドはresponseフィールドを増やしません。グループ化は別商品をまとめる設定で、属性filterの参照元設定ではありません。</span>
               </article>
               <article>
                 <strong>requestが変更できる範囲</strong>
@@ -1411,6 +1416,12 @@ flowchart TB
                 <span>掲載要件、正規化、Global Catalogの推論フィールド、relevance rankingです。ranking algorithmと重みは公開されていません。</span>
               </article>
             </div>
+            <aside class="catalog-note" aria-label="カテゴリーメタフィールドの観測とCatalogの掲載条件">
+              <strong>標準属性であっても、filterの入力になるとは限らない</strong>
+              <p>カテゴリーメタフィールドは、ストアのfilter・swatchやバリアントオプションとの接続に使えます。Globalの<code>filters.attributes</code>はShopify拡張です。属性同士はAND、同じ属性の値はORで照合します。Agent profileにはCatalogの基本capabilityと<code>dev.shopify.catalog.global</code>を宣言します。</p>
+              <p><strong>2026-10-27（UTC）の観測:</strong> Maintainerのデモストアでは、タイトル検索の対照確認後も、カテゴリーメタフィールドにだけ保存したYellowは一致せず、オプションのBlackは一致しました。これは仕様上のルールではありません。<a class="inline-link" href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">日付付きの検証とグループ化の注意点を見る。</a></p>
+              <p>データのmappingで、<a class="inline-link" href="https://help.shopify.com/ja/manual/shopify-catalog/requirements#eligibility-requirements-related-to-account-standing-and-history">アカウントのステータス・運営履歴を含むCatalogの掲載条件</a>を回避することはできません。公開資料の確認日: 2026-10-29。</p>
+            </aside>
           </section>
 
           <footer>
@@ -1488,7 +1499,7 @@ flowchart TB
             <div class="catalog-boundaries">
               <article>
                 <strong>カスタマイズはページ単位</strong>
-                <span>確認したテーマは<code>FAQPage</code>、<code>BreadcrumbList</code>、collectionの<code>ItemList</code> / <code>CollectionPage</code>を追加しません。ReviewのJSON-LDは保証されないためappやfilterの出力を確認します。テーマ編集でCatalog metadataは上書きできません。</span>
+                <span>確認したテーマは<code>FAQPage</code>、<code>BreadcrumbList</code>、collectionの<code>ItemList</code> / <code>CollectionPage</code>を追加しません。ReviewのJSON-LDは保証されません。2026-10-26の検証ではカテゴリーの生の値は含まれず、variant名にはoption値が含まれました。テーマ編集でCatalog metadataは上書きできません。</span>
               </article>
               <article>
                 <strong>AEOの成果を保証するものではない</strong>
@@ -1496,7 +1507,7 @@ flowchart TB
               </article>
               <article>
                 <strong>実ストアを検証する</strong>
-                <span>商品・記事・トップページのURLを<a class="inline-link" href="https://search.google.com/test/rich-results">Google リッチリザルトテスト</a>で確認します。対象はGoogle対応の型です。schema.org全般には<a class="inline-link" href="https://validator.schema.org/">Schema Markup Validator</a>を使います。どちらもAEOの成果は測定しません。</span>
+                <span><a class="inline-link" href="https://search.google.com/test/rich-results">Google リッチリザルトテスト</a> →「テスト済みのページを表示」→ HTMLで<code>application/ld+json</code>を探します。パスワード保護中は、取得したHTMLを「コード」に貼り付けます。schema.org全般には<a class="inline-link" href="https://validator.schema.org/">Schema Markup Validator</a>を使います。どちらもAEOの成果は測定しません。</span>
               </article>
             </div>
           </section>
@@ -1520,7 +1531,7 @@ flowchart TB
         <section class="slide" aria-labelledby="faq-title">
           <header>
             <p class="eyebrow">実装FAQ</p>
-            <h1 id="faq-title">6つの違いを知れば実装の誤解を防げる</h1>
+            <h1 id="faq-title">7つの違いを知れば実装の誤解を防げる</h1>
             <p class="subtitle">
               各項目を開くと、実装境界の要点を確認できます。保守される正本、詳しい説明、
               Shopifyドキュメントへのリンクは
@@ -1558,7 +1569,7 @@ flowchart TB
                 <summary>独自Catalogを作り、Catalog IDを渡す必要がありますか？</summary>
                 <div class="faq-answer">
                   <p>いいえ。Global Catalogはデフォルトで対象となるShopify Merchantを検索します。Saved Catalogは繰り返し使う範囲やfilterのための任意機能です。</p>
-                  <p>使う場合はShopify GIDではなく<code>saved_catalog_slug</code>を渡します。API credentialやproduct IDとは別の識別子です。</p>
+                  <p><code>catalog.catalog_id</code>を使います。<code>saved_catalog_slug</code>は非推奨です。保存済みfilterが範囲の上限になり、範囲内の値はさらに絞り込み、範囲外の値は保存済み設定に戻ります。保存済みquery接頭辞は先頭に付きます。このwrapperは旧aliasを使っています。</p>
                 </div>
               </details>
 
@@ -1575,6 +1586,15 @@ flowchart TB
                 <div class="faq-answer">
                   <p>既知の1つのMerchantにはStorefront Catalogを使います。複数Merchantの商品発見、比較、推薦にはGlobal Catalogを使います。</p>
                   <p>どちらもUCP Catalogを実装しますが、範囲、認証、Shopify extensionのfieldが異なります。</p>
+                </div>
+              </details>
+
+              <details class="faq-item">
+                <summary>カテゴリーメタフィールドは、任意のカスタムメタフィールドと同じ扱いですか？</summary>
+                <div class="faq-answer">
+                  <p>いいえ。タクソノミーに紐づく標準属性で、ストアのfilter・swatch、バリアントオプションとの接続、Catalogのグループ化での利用が公開されています。responseのフィールドは増えません。</p>
+                  <p>Globalの<code>filters.attributes</code>は<code>Color</code>・<code>Size</code>・<code>Target gender</code>に対応しますが、Merchantが入力したカテゴリーの値を照合するかは未公開です。Maintainerの2026-10-27の検証では、カテゴリーにだけ設定した色は一致しませんでした。2026-10-26にはCatalogと標準JSON-LDの検証対象の出力に生のカテゴリー値は含まれませんでした。いずれも観測であり、普遍的な制約ではありません。</p>
+                  <p>色やサイズを明示的に表現するには、適切な場合に実際のバリアントオプションを使い、必要に応じてカテゴリーメタフィールドに接続します。順位や照合を保証するものではありません。<a href="https://github.com/shopify-apac-ts/shopify-ucp-demo-mcp/blob/main/docs/catalog-field-mapping.md#5a-category-metafields">根拠と注意点を見る。</a></p>
                 </div>
               </details>
             </div>
